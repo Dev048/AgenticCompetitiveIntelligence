@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VANTAGE // Competitive Intelligence Monitoring Platform</title>
+  <meta name="description" content="Production evidence-backed competitive intelligence monitoring, continuous source observation, agentic RAG, and prescriptive decision support." />
+  
+  <!-- Favicon SVG -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%236366f1'/><path d='M30 70 L50 30 L70 70 Z' fill='none' stroke='white' stroke-width='8'/><circle cx='50' cy='30' r='8' fill='%2306b6d4'/></svg>" />
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="/css/theme.css" />
+  <link rel="stylesheet" href="/css/layout.css" />
+  <link rel="stylesheet" href="/css/components.css" />
+  <link rel="stylesheet" href="/css/views.css" />
+</head>
+<body>
+  <div id="app-root">
+    <!-- Sidebar Navigation -->
+    <aside class="app-sidebar">
+      <div class="sidebar-header">
+        <div class="brand-logo">V</div>
+        <div class="brand-text">
+          <span class="brand-title">VANTAGE</span>
+          <span class="brand-subtitle">Competitive Intel</span>
+        </div>
+      </div>
+
+      <!-- Workspace Context Selector -->
+      <div class="sidebar-workspace">
+        <button class="workspace-badge-btn" id="btn-workspace-select" title="Switch or create workspace">
+          <div class="workspace-badge-info">
+            <span class="workspace-icon">🏢</span>
+            <span class="workspace-name" id="active-workspace-name">Loading...</span>
+          </div>
+          <span style="font-size: 10px; color: var(--text-muted);">&blacktriangledown;</span>
+        </button>
+      </div>
+
+      <!-- Navigation Menu -->
+      <nav class="sidebar-nav">
+        <div class="nav-section-title">Core Platform</div>
+
+        <a href="#/dashboard" class="nav-item active" id="nav-dashboard">
+          <span class="nav-icon">📊</span>
+          <span>Dashboard</span>
+        </a>
+
+        <a href="#/competitors" class="nav-item" id="nav-competitors">
+          <span class="nav-icon">🏢</span>
+          <span>Competitors</span>
+        </a>
+
+        <a href="#/sources" class="nav-item" id="nav-sources">
+          <span class="nav-icon">📡</span>
+          <span>Sources & Monitoring</span>
+        </a>
+
+        <a href="#/intelligence" class="nav-item" id="nav-intelligence">
+          <span class="nav-icon">⚡</span>
+          <span>Intelligence Stream</span>
+        </a>
+
+        <div class="nav-section-title" style="margin-top: 14px;">Strategic Execution</div>
+
+        <a href="#/decisions" class="nav-item" id="nav-decisions">
+          <span class="nav-icon">⚖️</span>
+          <span>Decision Support</span>
+        </a>
+
+        <a href="#/workflows" class="nav-item" id="nav-workflows">
+          <span class="nav-icon">⚙️</span>
+          <span>Workflows</span>
+        </a>
+      </nav>
+
+      <!-- Sidebar Footer -->
+      <div class="sidebar-footer">
+        <div class="health-status-indicator">
+          <span class="status-dot" id="health-dot"></span>
+          <span id="health-text" style="font-size: 11px;">Checking...</span>
+        </div>
+        <div style="display: flex; gap: 8px;">
+          <a href="/metrics" target="_blank" style="color: var(--accent-cyan); text-decoration: none; font-size: 11px;" title="Prometheus Metrics Scrape Endpoint">
+            Metrics &nearr;
+          </a>
+          <a href="/api/v1/docs" target="_blank" style="color: var(--text-muted); text-decoration: none; font-size: 11px;" title="Open API Documentation">
+            API Docs &nearr;
+          </a>
+        </div>
+      </div>
+
+    </aside>
+
+    <!-- Main Viewport Area -->
+    <main class="app-main">
+      <!-- Top Application Header -->
+      <header class="app-header">
+        <div class="header-breadcrumbs">
+          <span class="breadcrumb-root" id="breadcrumb-root">Workspace</span>
+          <span class="breadcrumb-separator">/</span>
+          <span class="breadcrumb-current" id="breadcrumb-current">Dashboard</span>
+        </div>
+
+        <div class="header-actions">
+          <a href="#/workflows" class="btn btn-primary btn-sm">
+            <span>+</span> Run Ingestion
+          </a>
+        </div>
+      </header>
+
+      <!-- Dynamic Content Viewport -->
+      <div class="content-viewport" id="content-viewport">
+        <!-- Rendered dynamically by Router -->
+      </div>
+    </main>
+
+    <!-- Slide-Over Drawer for Evidence & Provenance Inspection -->
+    <div class="drawer-backdrop" id="drawer-backdrop"></div>
+    <aside class="slide-drawer" id="slide-drawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <h3 id="drawer-title">Details</h3>
+          <div class="drawer-subtitle" id="drawer-subtitle"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm btn-icon" id="btn-close-drawer" style="font-size: 18px;">&times;</button>
+      </div>
+      <div class="drawer-body" id="drawer-body"></div>
+      <div class="drawer-footer" id="drawer-footer"></div>
+    </aside>
+
+    <!-- Modal Dialog Container -->
+    <div class="modal-overlay" id="modal-overlay">
+      <div class="modal-dialog">
+        <div class="modal-header">
+          <h3 class="modal-title" id="modal-title">Dialog</h3>
+          <button class="btn btn-ghost btn-sm btn-icon" id="btn-close-modal" style="font-size: 18px;">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+        <div class="modal-footer" id="modal-footer"></div>
+      </div>
+    </div>
+
+    <!-- Global Floating Toast Container -->
+    <div id="toast-container"></div>
+  </div>
+
+  <!-- Main ES Module Application Script -->
+  <script type="module" src="/js/app.js"></script>
+</body>
+</html>

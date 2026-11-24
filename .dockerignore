@@ -1,0 +1,26 @@
+# Git and IDE
+.git
+.gitignore
+.vscode
+.idea
+.gemini
+
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# Local data and secrets
+.env
+data/
+scratch/
+*.db
+*.sqlite
+*.log

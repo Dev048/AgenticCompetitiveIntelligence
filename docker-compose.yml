@@ -1,0 +1,128 @@
+# ==============================================================================
+# Competitive Intelligence Monitoring Platform - Production Docker Compose
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # 1. Relational Persistence (PostgreSQL)
+  # ----------------------------------------------------------------------------
+  postgres:
+    image: postgres:16-alpine
+    container_name: ci-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-competitive_intelligence}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-competitive_intelligence}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 2. Vector Storage (Qdrant)
+  # ----------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.12.1
+    container_name: ci-qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/6333 && echo -e 'GET /readyz HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n' >&3 && cat <&3 | grep -q '200 OK'"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  # ----------------------------------------------------------------------------
+  # 3. Application API & Web Interface
+  # ----------------------------------------------------------------------------
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: competitive-intelligence:latest
+    container_name: ci-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-competitive_intelligence}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      API_HOST: 0.0.0.0
+      API_PORT: 8000
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      REASONING_LLM_MODEL: ${REASONING_LLM_MODEL:-gpt-4o}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bge_m3}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+    ports:
+      - "8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health/live || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ----------------------------------------------------------------------------
+  # 4. Continuous Source Monitoring Scheduler Worker
+  # ----------------------------------------------------------------------------
+  worker:
+    image: competitive-intelligence:latest
+    container_name: ci-worker
+    restart: unless-stopped
+    command: ["python", "-m", "competitive_intelligence.monitoring.worker_cli"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-competitive_intelligence}
+      QDRANT_URL: http://qdrant:6333
+      QDRANT_HOST: qdrant
+      QDRANT_PORT: 6333
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      DEBUG: ${DEBUG:-false}
+      MONITORING_MODE: worker
+      LLM_PROVIDER: ${LLM_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      DEFAULT_LLM_MODEL: ${DEFAULT_LLM_MODEL:-gpt-4o-mini}
+      REASONING_LLM_MODEL: ${REASONING_LLM_MODEL:-gpt-4o}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-bge_m3}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-BAAI/bge-m3}
+    healthcheck:
+      disable: true
+
+volumes:
+  postgres_data:
+    name: ci_postgres_data
+  qdrant_data:
+    name: ci_qdrant_data
