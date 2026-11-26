@@ -73,6 +73,9 @@ from competitive_intelligence.infrastructure.database.session import (
 from competitive_intelligence.knowledge_pipeline.chunking_service import (
     ChunkingService,
 )
+from competitive_intelligence.knowledge_pipeline.embeddings.bge_m3_provider import (
+    BGE_M3_DENSE_DIMENSIONS,
+)
 from competitive_intelligence.knowledge_pipeline.embeddings.embedding_service import (
     EmbeddingService,
 )
@@ -129,7 +132,7 @@ from competitive_intelligence.retrieval_engine.routing.router import (
 # - BGE-M3 weights are ~2.2GB: loading them per request is prohibitively slow.
 # - Embedded (path-based) Qdrant holds an exclusive lock on its storage folder, so only
 #   one client instance per process may exist.
-_EMBEDDING_PROVIDER_CACHE: dict[tuple[str, str, int], BaseEmbeddingProvider] = {}
+_EMBEDDING_PROVIDER_CACHE: dict[tuple[object, ...], BaseEmbeddingProvider] = {}
 _EMBEDDED_VECTOR_STORE_CACHE: dict[tuple[str, str], QdrantVectorStore] = {}
 # Sync dependencies run in FastAPI's threadpool: guard first-time construction so two
 # concurrent first requests cannot load the model twice or double-open the Qdrant folder.
@@ -279,8 +282,36 @@ def get_embedding_service(
                 _EMBEDDING_PROVIDER_CACHE[cache_key] = provider
         return EmbeddingService(provider=provider)
 
+    if cfg.embedding_provider == "fastembed":
+        from competitive_intelligence.knowledge_pipeline.embeddings.fastembed_provider import (
+            FastEmbedEmbeddingProvider,
+        )
+
+        fe_key = ("fastembed", cfg.fastembed_model, cfg.fastembed_threads, cfg.embedding_batch_size)
+        with _RESOURCE_CACHE_LOCK:
+            provider = _EMBEDDING_PROVIDER_CACHE.get(fe_key)
+            if provider is None:
+                provider = FastEmbedEmbeddingProvider(
+                    model_name=cfg.fastembed_model,
+                    threads=cfg.fastembed_threads,
+                    batch_size=cfg.embedding_batch_size,
+                )
+                _EMBEDDING_PROVIDER_CACHE[fe_key] = provider
+        return EmbeddingService(provider=provider)
+
     # Lightweight mock embedding provider for fast testing/dev
     return EmbeddingService(provider=MockEmbeddingProvider(dimension=1024))
+
+
+def embedding_dimensions(cfg: Settings) -> int:
+    """Vector size of the embedding provider ``get_embedding_service`` builds for ``cfg``."""
+    if cfg.environment != "production" and cfg.embedding_provider == "fastembed":
+        from competitive_intelligence.knowledge_pipeline.embeddings.fastembed_provider import (
+            fastembed_dimensions,
+        )
+
+        return fastembed_dimensions(cfg.fastembed_model)
+    return BGE_M3_DENSE_DIMENSIONS  # bge_m3, and the mock provider (1024) used in tests
 
 
 def get_vector_store(
@@ -291,7 +322,7 @@ def get_vector_store(
     if cfg.environment == "production":
         store_config = VectorStoreConfig(
             collection_name=cfg.qdrant_collection_name,
-            vector_dimensions=1024,
+            vector_dimensions=embedding_dimensions(cfg),
             distance_metric=DistanceMetric.COSINE,
             url=cfg.effective_qdrant_url,
             api_key=cfg.qdrant_api_key,
@@ -309,7 +340,7 @@ def get_vector_store(
                 embedded = QdrantVectorStore(
                     config=VectorStoreConfig(
                         collection_name=cfg.qdrant_collection_name,
-                        vector_dimensions=1024,
+                        vector_dimensions=embedding_dimensions(cfg),
                         distance_metric=DistanceMetric.COSINE,
                         location=None,
                         path=cfg.qdrant_path,
@@ -323,7 +354,7 @@ def get_vector_store(
     if cfg.qdrant_url or (cfg.qdrant_host != "localhost" and cfg.qdrant_location != ":memory:"):
         store_config = VectorStoreConfig(
             collection_name=cfg.qdrant_collection_name,
-            vector_dimensions=1024,
+            vector_dimensions=embedding_dimensions(cfg),
             distance_metric=DistanceMetric.COSINE,
             url=cfg.effective_qdrant_url,
             api_key=cfg.qdrant_api_key,
@@ -336,7 +367,7 @@ def get_vector_store(
     return QdrantVectorStore(
         config=VectorStoreConfig(
             collection_name=cfg.qdrant_collection_name,
-            vector_dimensions=1024,
+            vector_dimensions=embedding_dimensions(cfg),
             location=cfg.qdrant_location or ":memory:",
         )
     )

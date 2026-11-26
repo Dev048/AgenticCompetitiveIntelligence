@@ -61,6 +61,19 @@ api = [
     "uvicorn[standard]>=0.30.0",
 ]
 
+# Free-tier public demo (ENVIRONMENT=demo): API + agentic RAG on the fastembed ONNX embedder.
+# Deliberately excludes torch, sentence-transformers and crawl4ai (512 MB host, no crawling).
+demo = [
+    "fastapi>=0.111.0",
+    "uvicorn>=0.30.0",
+    "fastembed>=0.9.0",
+    "qdrant-client>=1.9.0",
+    "llama-index-core>=0.11.0",
+    "langgraph>=0.1.0",
+    "langchain-core>=0.2.0",
+    "rank-bm25>=0.2.2",
+]
+
 # Development & Testing
 dev = [
     "pytest>=8.2.0",

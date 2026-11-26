@@ -42,9 +42,13 @@ class Settings(BaseSettings):
     anthropic_model: str = "claude-3-5-sonnet-20241022"
     reasoning_llm_model: str = "gpt-4o"
     embedding_model: str = "BAAI/bge-m3"
-    embedding_provider: Literal["bge_m3", "mock"] = "mock"
+    embedding_provider: Literal["bge_m3", "fastembed", "mock"] = "mock"
     embedding_device: str = "cpu"
     embedding_batch_size: int = Field(default=32, ge=1, le=256)
+    # Lightweight ONNX embedder (no torch) for the free-tier demo and development only;
+    # production and staging must use bge_m3.
+    fastembed_model: str = "BAAI/bge-small-en-v1.5"
+    fastembed_threads: int | None = Field(default=None, ge=1, le=64)
     llm_timeout_seconds: float = Field(default=30.0, gt=0.0)
     llm_max_retries: int = Field(default=3, ge=0)
     llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
@@ -105,7 +109,8 @@ class Settings(BaseSettings):
     demo_allow_recommendation_review: bool = True
     demo_query_per_ip_per_minute: int = Field(default=5, ge=1, le=1000)
     demo_query_daily_cap: int = Field(default=200, ge=1)
-    # Reverse proxies in front of the app that append to X-Forwarded-For (Spaces: 1).
+    # Reverse proxies in front of the app that append to X-Forwarded-For (Render: assumed 1,
+    # not documented by Render; confirm against a live deploy).
     demo_trusted_proxy_hops: int = Field(default=1, ge=0, le=5)
     # Seed the demo workspace at startup from recorded LLM fixtures (never the live LLM).
     demo_seed_on_startup: bool = True
@@ -189,6 +194,11 @@ class Settings(BaseSettings):
 
             # LLM and embedding provider validation
             self._validate_real_model_providers(errors)
+            if self.embedding_provider == "fastembed":
+                errors.append(
+                    f"The fastembed embedding provider is not permitted in {self.environment}. "
+                    "Configure 'bge_m3' for production embeddings."
+                )
 
             # Qdrant validation
             if self.qdrant_location == ":memory:":
