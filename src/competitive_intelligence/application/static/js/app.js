@@ -11,6 +11,7 @@ import { renderCompetitors } from './views/competitors.js';
 import { renderSources } from './views/sources.js';
 import { renderIntelligence } from './views/intelligence.js';
 import { renderStrategicInsights } from './views/insights.js';
+import { renderAsk } from './views/ask.js';
 import { renderDecisions } from './views/decisions.js';
 import { renderWorkflows } from './views/workflows.js';
 
@@ -24,6 +25,7 @@ export async function initApp() {
   router.register('/sources', renderSources);
   router.register('/intelligence', renderIntelligence);
   router.register('/insights', renderStrategicInsights);
+  router.register('/ask', renderAsk);
   router.register('/decisions', renderStrategicInsights);
   router.register('/workflows', renderWorkflows);
 

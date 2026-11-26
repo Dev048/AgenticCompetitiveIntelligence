@@ -74,6 +74,7 @@ export class Router {
         '/competitors': 'Competitors',
         '/intelligence': 'Intelligence Feed',
         '/insights': 'Strategic Insights',
+        '/ask': 'Ask the Evidence',
         '/decisions': 'Strategic Insights',
         '/sources': 'Sources',
         '/workflows': 'Workflows',

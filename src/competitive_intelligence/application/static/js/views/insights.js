@@ -269,24 +269,26 @@ function renderRecommendationsList(container, recommendations, contexts, compMap
         const isRejected = rec.status === 'rejected';
         const isProposed = rec.status === 'proposed';
         const borderColor = isAccepted ? 'var(--status-success)' : isRejected ? 'var(--status-danger)' : 'var(--accent-primary)';
-        const confidenceScore = Math.round((rec.confidence?.score || 0.85) * 100);
+        const confidenceScore = typeof rec.confidence?.score === 'number'
+          ? `${Math.round(rec.confidence.score * 100)}%`
+          : 'n/a';
 
         return `
           <div class="card" style="border-left:4px solid ${borderColor};">
             <div class="card-header">
               <div>
                 <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px; flex-wrap:wrap;">
-                  <span class="badge ${rec.urgency === 'urgent' ? 'badge-danger' : 'badge-cyan'}">${state.escapeHtml(rec.urgency || 'MEDIUM')}</span>
                   <span class="badge ${isAccepted ? 'badge-success' : isRejected ? 'badge-danger' : 'badge-warning'}">
-                    STATUS: ${state.escapeHtml((rec.status || 'PROPOSED').toUpperCase())}
+                    ${isProposed ? 'PROPOSED · awaiting human review' : state.escapeHtml((rec.status || '').toUpperCase())}
                   </span>
+                  ${rec.urgency ? `<span class="badge ${rec.urgency === 'urgent' || rec.urgency === 'critical' ? 'badge-danger' : 'badge-cyan'}">Urgency: ${state.escapeHtml(rec.urgency.replace(/_/g, ' '))}</span>` : ''}
                 </div>
                 <h4 style="font-family:var(--font-display); font-size:16px; font-weight:700; color:var(--text-primary); margin-top:4px;">
                   ${state.escapeHtml(rec.title)}
                 </h4>
               </div>
               <button class="btn btn-secondary btn-sm btn-view-provenance" data-rec-id="${rec.recommendation_id}">
-                🔍 10-Layer Lineage
+                🔍 Trace to sources
               </button>
             </div>
 
@@ -298,13 +300,13 @@ function renderRecommendationsList(container, recommendations, contexts, compMap
               <div>
                 <div class="form-label" style="font-size:11px; margin-bottom:6px; color:var(--status-success);">Expected Strategic Benefits</div>
                 <ul style="padding-left:18px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
-                  ${rec.expected_benefits?.length ? rec.expected_benefits.map(b => `<li>${state.escapeHtml(b)}</li>`).join('') : '<li>Competitive positioning reinforcement</li>'}
+                  ${rec.expected_benefits?.length ? rec.expected_benefits.map(b => `<li>${state.escapeHtml(b)}</li>`).join('') : '<li style="list-style:none; margin-left:-18px; color:var(--text-muted);">None listed</li>'}
                 </ul>
               </div>
               <div>
                 <div class="form-label" style="font-size:11px; margin-bottom:6px; color:var(--status-warning);">Trade-offs & Resource Demands</div>
                 <ul style="padding-left:18px; font-size:12px; color:var(--text-secondary); line-height:1.5;">
-                  ${rec.tradeoffs?.length ? rec.tradeoffs.map(t => `<li>${state.escapeHtml(t)}</li>`).join('') : '<li>Standard resource re-allocation</li>'}
+                  ${rec.tradeoffs?.length ? rec.tradeoffs.map(t => `<li>${state.escapeHtml(t)}</li>`).join('') : '<li style="list-style:none; margin-left:-18px; color:var(--text-muted);">None listed</li>'}
                 </ul>
               </div>
             </div>
@@ -312,7 +314,7 @@ function renderRecommendationsList(container, recommendations, contexts, compMap
             <!-- Human Approval Governance Bar -->
             <div style="display:flex; align-items:center; justify-content:space-between; padding-top:12px; border-top:1px solid var(--border-subtle); flex-wrap:wrap; gap:12px; margin-top:14px;">
               <div style="font-size:12px; color:var(--text-muted);">
-                Confidence: <strong style="color:var(--text-primary); font-family:var(--font-mono);">${confidenceScore}%</strong>
+                Confidence: <strong style="color:var(--text-primary); font-family:var(--font-mono);">${confidenceScore}</strong>
                 • Formulated: ${rec.generated_at ? new Date(rec.generated_at).toLocaleDateString() : 'Recent'}
               </div>
 
@@ -688,44 +690,156 @@ function openInsightDrawer(insight, compName, allEvents = [], allSignals = []) {
 }
 
 function openProvenanceDrawer(provenance) {
+  const L = provenance.layers || {};
+  const esc = (v) => state.escapeHtml(v == null ? '' : String(v));
+  const short = (id) => {
+    if (!id) return '';
+    const s = String(id);
+    return esc(s.length > 14 ? `${s.slice(0, 12)}…` : s);
+  };
+  const hash = (h) => (h ? `sha256:${esc(String(h).slice(0, 16))}…` : '');
+  const when = (iso) => (iso ? esc(new Date(iso).toLocaleString()) : '');
+
+  const layers = [
+    {
+      label: 'Recommendation',
+      hint: 'Proposed action. Never auto-executed: a human accepts or rejects it.',
+      list: L.recommendation ? [L.recommendation] : [],
+      render: (r) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(r.title)}</div>
+          <div class="prov-meta"><span>status: ${esc(r.status)}</span>${r.urgency ? `<span>urgency: ${esc(r.urgency)}</span>` : ''}</div>
+          ${r.rationale ? `<div style="margin-top:4px;">${esc(r.rationale)}</div>` : ''}
+        </div>`,
+    },
+    {
+      label: 'Selected option',
+      hint: 'The evaluated option the recommendation adopts.',
+      list: provenance.selected_option ? [provenance.selected_option] : [],
+      render: (o) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(o.title)}</div>
+          ${o.description ? `<div>${esc(o.description)}</div>` : ''}
+          ${o.risks && o.risks.length ? `<div class="prov-meta"><span>risks: ${o.risks.map((r) => esc(r.description)).join(' · ')}</span></div>` : ''}
+        </div>`,
+    },
+    {
+      label: 'Decision context',
+      hint: 'The objectives and constraints a human supplied.',
+      list: L.decision_context ? [L.decision_context] : [],
+      render: (c) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(c.title)}</div>
+          <div class="prov-meta"><span>domain: ${esc(c.decision_domain)}</span></div>
+        </div>`,
+    },
+    {
+      label: 'Strategic insights',
+      list: L.insights,
+      render: (i) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(i.title)}</div>
+          ${i.statement ? `<div>${esc(i.statement)}</div>` : ''}
+          <div class="prov-meta"><span>${esc(i.insight_type)}</span><span>${short(i.insight_id)}</span></div>
+        </div>`,
+    },
+    {
+      label: 'Inferred signals',
+      list: L.signals,
+      render: (g) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(g.title)}</div>
+          ${g.summary ? `<div>${esc(g.summary)}</div>` : ''}
+          <div class="prov-meta"><span>${esc(g.signal_type)}</span></div>
+        </div>`,
+    },
+    {
+      label: 'Detected events',
+      list: L.events,
+      render: (e) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(e.title)}</div>
+          ${e.summary ? `<div>${esc(e.summary)}</div>` : ''}
+          <div class="prov-meta"><span>${esc(e.event_type)}</span>${e.detected_at ? `<span>${when(e.detected_at)}</span>` : ''}</div>
+        </div>`,
+    },
+    {
+      label: 'Raw evidence',
+      hint: 'The exact quotes the claims above rest on.',
+      list: L.evidence,
+      render: (v) => `
+        <div class="prov-item">
+          <div class="prov-quote">“${esc(v.quote)}”</div>
+          <div class="prov-meta">
+            ${v.evidence_role ? `<span>${esc(v.evidence_role)}</span>` : ''}
+            ${typeof v.retrieval_score === 'number' ? `<span>score ${v.retrieval_score.toFixed(3)}</span>` : ''}
+            <span>chunk ${short(v.chunk_id)}</span>
+          </div>
+        </div>`,
+    },
+    {
+      label: 'Document chunks',
+      list: L.chunks,
+      render: (c) => `
+        <div class="prov-item">
+          <div class="prov-meta">
+            <span>chunk ${short(c.chunk_id)}</span>
+            <span>#${esc(c.chunk_index + 1)}${c.total_chunks ? ` of ${esc(c.total_chunks)}` : ''}</span>
+            ${c.start_char != null ? `<span>chars ${esc(c.start_char)}–${esc(c.end_char)}</span>` : ''}
+            <span>${hash(c.content_hash)}</span>
+          </div>
+          ${c.preview ? `<div style="margin-top:4px;">${esc(c.preview)}</div>` : ''}
+        </div>`,
+    },
+    {
+      label: 'Document versions',
+      hint: 'Immutable content snapshots, identified by their content hash.',
+      list: L.versions,
+      render: (v) => `
+        <div class="prov-item">
+          <div class="prov-meta">
+            <span>version ${short(v.version_id)}</span>
+            <span>${hash(v.content_hash)}</span>
+            ${v.acquired_at ? `<span>acquired ${when(v.acquired_at)}</span>` : ''}
+          </div>
+        </div>`,
+    },
+    {
+      label: 'Monitored sources',
+      list: L.sources,
+      render: (src) => `
+        <div class="prov-item">
+          <div class="prov-item-title">${esc(src.display_name)}</div>
+          <div class="prov-meta"><span>${esc(src.category)}</span><span>${esc(src.url)}</span></div>
+        </div>`,
+    },
+  ];
+
   state.openDrawer({
-    title: '10-Layer Audit Lineage',
-    subtitle: `Provenance ID: ${provenance.provenance_id || 'prov_verified'}`,
+    title: 'Trace to sources',
+    subtitle: `10-layer provenance for recommendation ${short(provenance.recommendation_id)}`,
     renderContent: (el) => {
-      const layers = [
-        { label: 'Layer 1: External Source', data: provenance.source },
-        { label: 'Layer 2: Source Document', data: provenance.document },
-        { label: 'Layer 3: Document Version', data: provenance.version },
-        { label: 'Layer 4: Document Chunk', data: provenance.chunk },
-        { label: 'Layer 5: Raw Evidence', data: provenance.evidence },
-        { label: 'Layer 6: Detected Event', data: provenance.event },
-        { label: 'Layer 7: Inferred Signal', data: provenance.signal },
-        { label: 'Layer 8: Strategic Insight', data: provenance.insight },
-        { label: 'Layer 9: Decision Context', data: provenance.decision_context },
-        { label: 'Layer 10: Prescriptive Recommendation', data: provenance.recommendation },
-      ];
-
       el.innerHTML = `
-        <div style="display:flex; flex-direction:column; gap:14px;">
-          <div style="background:rgba(99,102,241,0.08); padding:12px; border-radius:8px; border:1px solid var(--border-highlight); font-size:12px; color:var(--text-secondary); line-height:1.5;">
-            Every assertion, event, and recommendation in VANTAGE is strictly backed by end-to-end provenance traces, preventing hallucinations and verifying source grounding.
-          </div>
-
-          <div style="display:flex; flex-direction:column; gap:8px;">
-            ${layers.map((layer, idx) => `
-              <div style="background:var(--bg-canvas); border:1px solid var(--border-subtle); border-radius:6px; padding:10px 12px;">
-                <div style="display:flex; align-items:center; justify-content:space-between;">
-                  <span style="font-weight:600; font-size:12px; color:var(--accent-cyan);">${layer.label}</span>
-                  <span class="badge ${layer.data ? 'badge-success' : 'badge-neutral'}" style="font-size:9px;">
-                    ${layer.data ? 'VERIFIED' : 'N/A'}
-                  </span>
+        <p class="prov-intro">
+          Every claim links down to the exact text it came from: recommendation → option → context →
+          insight → signal → event → quote → chunk → hashed version → source.
+        </p>
+        <div class="prov-trail">
+          ${layers.map((layer, idx) => {
+            const list = layer.list || [];
+            return `
+              <div class="prov-layer ${list.length ? '' : 'is-empty'}">
+                <div class="prov-node">${idx + 1}</div>
+                <div class="prov-body">
+                  <div class="prov-head">
+                    <span class="prov-label">${esc(layer.label)}</span>
+                    <span class="prov-count">${list.length}</span>
+                  </div>
+                  ${layer.hint ? `<div class="prov-meta" style="font-family:var(--font-sans);">${esc(layer.hint)}</div>` : ''}
+                  ${list.length ? list.map(layer.render).join('') : '<div class="prov-empty">Nothing recorded at this layer.</div>'}
                 </div>
-                ${layer.data ? `
-                  <pre style="margin-top:6px; font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); white-space:pre-wrap; background:rgba(0,0,0,0.3); padding:8px; border-radius:4px; max-height:120px; overflow-y:auto;">${state.escapeHtml(JSON.stringify(layer.data, null, 2))}</pre>
-                ` : ''}
-              </div>
-            `).join('')}
-          </div>
+              </div>`;
+          }).join('')}
         </div>
       `;
     },

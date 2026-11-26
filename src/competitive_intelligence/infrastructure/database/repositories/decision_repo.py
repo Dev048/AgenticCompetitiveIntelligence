@@ -543,6 +543,8 @@ class SqlDecisionRepository(BaseDecisionRepository):
         if option:
             insight_ids.update(option.supporting_insight_ids)
 
+        context = await self.get_context_by_id(rec.decision_id)
+
         async with self._get_session() as session:
             ins_orms = []
             if insight_ids:
@@ -663,6 +665,106 @@ class SqlDecisionRepository(BaseDecisionRepository):
             "event_ids": list(event_ids),
             "signal_ids": list(signal_ids),
             "insight_ids": list(insight_ids),
+            "layers": {
+                "recommendation": {
+                    "recommendation_id": rec.recommendation_id,
+                    "title": rec.title,
+                    "summary": rec.summary,
+                    "rationale": rec.rationale,
+                    "status": _plain(rec.status),
+                    "urgency": _plain(rec.urgency),
+                },
+                "decision_context": (
+                    {
+                        "decision_id": context.decision_id,
+                        "title": context.title,
+                        "decision_domain": _plain(context.decision_domain),
+                    }
+                    if context
+                    else None
+                ),
+                "insights": [
+                    {
+                        "insight_id": o.insight_id,
+                        "insight_type": _plain(o.insight_type),
+                        "title": o.title,
+                        "statement": o.statement,
+                    }
+                    for o in sorted(ins_orms, key=lambda o: o.insight_id)
+                ],
+                "signals": [
+                    {
+                        "signal_id": o.signal_id,
+                        "signal_type": _plain(o.signal_type),
+                        "title": o.title,
+                        "summary": o.summary,
+                    }
+                    for o in sorted(sig_orms, key=lambda o: o.signal_id)
+                ],
+                "events": [
+                    {
+                        "event_id": o.event_id,
+                        "event_type": _plain(o.event_type),
+                        "title": o.title,
+                        "summary": o.summary,
+                        "detected_at": _iso(o.detected_at),
+                    }
+                    for o in sorted(event_orms, key=lambda o: o.event_id)
+                ],
+                "evidence": [
+                    {
+                        "evidence_id": o.evidence_id,
+                        "quote": _truncate(o.extracted_text, _QUOTE_CHARS),
+                        "evidence_role": _plain(o.evidence_role),
+                        "retrieval_score": o.retrieval_score,
+                        "chunk_id": o.chunk_id,
+                        "version_id": o.version_id,
+                        "document_id": o.document_id,
+                        "source_id": o.source_id,
+                        "source_url": o.source_url,
+                    }
+                    for o in sorted(evidence_orms, key=lambda o: o.evidence_id)
+                ],
+                "chunks": [
+                    {
+                        "chunk_id": o.chunk_id,
+                        "version_id": o.version_id,
+                        "chunk_index": o.chunk_index,
+                        "total_chunks": o.total_chunks,
+                        "start_char": o.start_char,
+                        "end_char": o.end_char,
+                        "content_hash": o.content_hash,
+                        "preview": _truncate(o.content, _PREVIEW_CHARS),
+                    }
+                    for o in sorted(chunk_orms, key=lambda o: (o.version_id, o.chunk_index))
+                ],
+                "versions": [
+                    {
+                        "version_id": o.version_id,
+                        "document_id": o.document_id,
+                        "content_hash": o.content_hash,
+                        "acquired_at": _iso(o.acquired_at),
+                    }
+                    for o in sorted(version_orms, key=lambda o: o.version_id)
+                ],
+                "documents": [
+                    {
+                        "document_id": o.document_id,
+                        "source_id": o.source_id,
+                        "canonical_url": o.canonical_url,
+                    }
+                    for o in sorted(document_orms, key=lambda o: o.document_id)
+                ],
+                "sources": [
+                    {
+                        "source_id": o.source_id,
+                        "display_name": o.display_name,
+                        "category": _plain(o.category),
+                        "url": o.url_or_identifier,
+                    }
+                    for o in sorted(source_orms, key=lambda o: o.source_id)
+                ],
+            },
         }
 
     # --------------------------------------------------------------------------
@@ -803,3 +905,24 @@ class SqlDecisionRepository(BaseDecisionRepository):
             supersedes_recommendation_id=orm.supersedes_recommendation_id,
             metadata=orm.metadata_,
         )
+
+
+_QUOTE_CHARS = 600
+_PREVIEW_CHARS = 300
+
+
+def _plain(value: Any) -> str | None:
+    """Enum/str/None -> JSON-friendly string."""
+    if value is None:
+        return None
+    return str(getattr(value, "value", value))
+
+
+def _iso(value: Any) -> str | None:
+    return value.isoformat() if hasattr(value, "isoformat") else None
+
+
+def _truncate(text: str | None, limit: int) -> str | None:
+    if text is None:
+        return None
+    return text if len(text) <= limit else text[: limit - 1] + "…"
