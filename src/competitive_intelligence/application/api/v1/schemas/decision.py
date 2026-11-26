@@ -90,6 +90,101 @@ class RecommendationResponse(BaseModel):
     generated_at: datetime
 
 
+class ProvenanceRecommendationLayer(BaseModel):
+    recommendation_id: str
+    title: str
+    summary: str | None = None
+    rationale: str | None = None
+    status: str
+    urgency: str | None = None
+
+
+class ProvenanceContextLayer(BaseModel):
+    decision_id: str
+    title: str
+    decision_domain: str | None = None
+
+
+class ProvenanceInsightLayer(BaseModel):
+    insight_id: str
+    insight_type: str | None = None
+    title: str
+    statement: str | None = None
+
+
+class ProvenanceSignalLayer(BaseModel):
+    signal_id: str
+    signal_type: str | None = None
+    title: str
+    summary: str | None = None
+
+
+class ProvenanceEventLayer(BaseModel):
+    event_id: str
+    event_type: str | None = None
+    title: str
+    summary: str | None = None
+    detected_at: str | None = None
+
+
+class ProvenanceEvidenceLayer(BaseModel):
+    evidence_id: str
+    quote: str | None = None
+    evidence_role: str | None = None
+    retrieval_score: float | None = None
+    chunk_id: str | None = None
+    version_id: str
+    document_id: str
+    source_id: str
+    source_url: str | None = None
+
+
+class ProvenanceChunkLayer(BaseModel):
+    chunk_id: str
+    version_id: str
+    chunk_index: int
+    total_chunks: int | None = None
+    start_char: int | None = None
+    end_char: int | None = None
+    content_hash: str | None = None
+    preview: str | None = None
+
+
+class ProvenanceVersionLayer(BaseModel):
+    version_id: str
+    document_id: str
+    content_hash: str
+    acquired_at: str | None = None
+
+
+class ProvenanceDocumentLayer(BaseModel):
+    document_id: str
+    source_id: str | None = None
+    canonical_url: str | None = None
+
+
+class ProvenanceSourceLayer(BaseModel):
+    source_id: str
+    display_name: str | None = None
+    category: str | None = None
+    url: str | None = None
+
+
+class ProvenanceLayers(BaseModel):
+    """Per-layer details, top (recommendation) to bottom (monitored source)."""
+
+    recommendation: ProvenanceRecommendationLayer | None = None
+    decision_context: ProvenanceContextLayer | None = None
+    insights: list[ProvenanceInsightLayer] = Field(default_factory=list)
+    signals: list[ProvenanceSignalLayer] = Field(default_factory=list)
+    events: list[ProvenanceEventLayer] = Field(default_factory=list)
+    evidence: list[ProvenanceEvidenceLayer] = Field(default_factory=list)
+    chunks: list[ProvenanceChunkLayer] = Field(default_factory=list)
+    versions: list[ProvenanceVersionLayer] = Field(default_factory=list)
+    documents: list[ProvenanceDocumentLayer] = Field(default_factory=list)
+    sources: list[ProvenanceSourceLayer] = Field(default_factory=list)
+
+
 class ProvenanceTreeResponse(BaseModel):
     """Complete 10-layer reconstructed provenance tree DTO."""
 
@@ -112,6 +207,7 @@ class ProvenanceTreeResponse(BaseModel):
     event_ids: list[str] = Field(default_factory=list)
     signal_ids: list[str] = Field(default_factory=list)
     insight_ids: list[str] = Field(default_factory=list)
+    layers: ProvenanceLayers = Field(default_factory=ProvenanceLayers)
 
 
 class RecommendationStatusUpdateRequest(BaseModel):

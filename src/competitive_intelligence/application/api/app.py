@@ -3,9 +3,12 @@
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
+from typing import Any
+
 from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
+from starlette.staticfiles import StaticFiles
 
 from competitive_intelligence.application.api.demo_guard import DemoReadOnlyMiddleware
 from competitive_intelligence.application.api.error_handlers import (
@@ -175,14 +178,24 @@ def create_app() -> FastAPI:
         )
 
     # Mount UI static files
-    from pathlib import Path
-    from starlette.staticfiles import StaticFiles
-
     static_dir = Path(__file__).resolve().parent.parent / "static"
     if static_dir.exists():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="ui")
+        app.mount("/", _RevalidatingStaticFiles(directory=str(static_dir), html=True), name="ui")
 
     return app
+
+
+class _RevalidatingStaticFiles(StaticFiles):
+    """Static UI files that browsers must revalidate (ETag) on every load.
+
+    The UI is unbundled ES modules with no content hashes, so heuristic caching would
+    keep serving stale modules after a deploy.
+    """
+
+    def file_response(self, *args: Any, **kwargs: Any) -> Response:
+        response = super().file_response(*args, **kwargs)
+        response.headers["Cache-Control"] = "no-cache"
+        return response
 
 
 # Default ASGI app instance

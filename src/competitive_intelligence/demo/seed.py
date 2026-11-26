@@ -18,7 +18,7 @@ from pydantic import BaseModel, Field
 from competitive_intelligence.agentic_rag.llm.interfaces import BaseLLMClient
 from competitive_intelligence.application.api import deps
 from competitive_intelligence.application.models import TrackedCompetitor, User, Workspace
-from competitive_intelligence.core.logger import get_logger
+from competitive_intelligence.core.logger import clear_log_context, get_logger
 from competitive_intelligence.demo.corpus import (
     COMPETITORS,
     DEMO_OWNER_USER_ID,
@@ -132,6 +132,8 @@ async def seed_demo_workspace(
 
     if isinstance(llm, ReplayLLMClient):
         summary.llm = llm.stats
+    # Pipeline runs bind run/stage IDs to the log context; don't leak them into later logs.
+    clear_log_context()
     summary.duration_seconds = round(time.perf_counter() - started, 2)
     return summary
 

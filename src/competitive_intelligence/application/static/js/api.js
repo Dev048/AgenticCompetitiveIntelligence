@@ -48,6 +48,7 @@ export class ApiClient {
           errorData.detail || errorData.message || `API Error: ${response.status} ${response.statusText}`
         );
         error.status = response.status;
+        error.code = errorData.error_code || null;
         error.data = errorData;
         throw error;
       }
@@ -58,7 +59,10 @@ export class ApiClient {
 
       return await response.json();
     } catch (err) {
-      console.error(`[API ERROR] ${options.method || 'GET'} ${url}:`, err);
+      // Expected client errors (rate limit, read-only demo, validation, not found) are
+      // shown to the user by the calling view; only server/network failures are errors.
+      const log = err.status && err.status < 500 ? console.warn : console.error;
+      log(`[API] ${options.method || 'GET'} ${url}:`, err.message);
       throw err;
     }
   }
@@ -225,6 +229,14 @@ export class ApiClient {
     return this.request(
       `/workspaces/${encodeURIComponent(workspaceId)}/recommendations/${encodeURIComponent(recommendationId)}`
     );
+  }
+
+  // Evidence query (retrieval + bounded agentic RAG trace)
+  queryEvidence(workspaceId, payload) {
+    return this.request(`/workspaces/${encodeURIComponent(workspaceId)}/query`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   getRecommendationProvenance(workspaceId, recommendationId) {

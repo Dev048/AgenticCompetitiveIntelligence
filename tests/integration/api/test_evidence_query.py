@@ -1,6 +1,5 @@
 """POST /workspaces/{id}/query: evidence with provenance and an agentic trace."""
 
-import asyncio
 from collections.abc import Iterator
 from typing import Any
 
@@ -21,12 +20,6 @@ from competitive_intelligence.application.api.demo_guard import reset_query_rate
 from competitive_intelligence.core.budgets import LLMBudgetTracker
 from competitive_intelligence.core.config import get_settings
 from competitive_intelligence.demo.corpus import DEMO_WORKSPACE_ID
-from competitive_intelligence.demo.replay_llm import LLMFixtureStore, ReplayLLMClient
-from competitive_intelligence.demo.seed import seed_demo_workspace
-from competitive_intelligence.infrastructure.database.session import (
-    get_db_manager,
-    reset_db_managers,
-)
 
 URL = f"/api/v1/workspaces/{DEMO_WORKSPACE_ID}/query"
 
@@ -58,40 +51,9 @@ class _RateLimitedLLM(BaseLLMClient):
         raise LLMRateLimitError("429")
 
 
-@pytest.fixture(scope="module")
-def seeded(tmp_path_factory: pytest.TempPathFactory) -> Iterator[dict[str, str]]:
-    root = tmp_path_factory.mktemp("query")
-    env = {
-        "ENVIRONMENT": "development",
-        "LLM_PROVIDER": "mock",
-        "EMBEDDING_PROVIDER": "mock",
-        "QDRANT_PATH": str(root / "qdrant"),
-        "DATABASE_URL": f"sqlite+aiosqlite:///{root / 'query.db'}",
-    }
-    patch = pytest.MonkeyPatch()
-    for key, value in env.items():
-        patch.setenv(key, value)
-    get_settings.cache_clear()
-    deps.reset_resource_caches()
-
-    async def _seed() -> None:
-        recorder = ReplayLLMClient(
-            LLMFixtureStore(root / "fx.json"), mode="record", inner=MockLLMClient()
-        )
-        summary = await seed_demo_workspace(llm_client=recorder, db_manager=get_db_manager())
-        assert summary.steps_failed == 0
-        await reset_db_managers()
-
-    asyncio.run(_seed())
-    yield env
-    deps.reset_resource_caches()
-    patch.undo()
-    get_settings.cache_clear()
-
-
 @pytest.fixture
-def client(seeded: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
-    for key, value in seeded.items():
+def client(seeded_demo: dict[str, str], monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
+    for key, value in seeded_demo.items():
         monkeypatch.setenv(key, value)
     get_settings.cache_clear()
     reset_llm_call_guard()
@@ -212,7 +174,7 @@ def test_demo_mode_rate_limits_queries(
     assert int(limited.headers["Retry-After"]) > 0
 
 
-def test_live_llm_client_is_guarded(seeded: dict[str, str]) -> None:
+def test_live_llm_client_is_guarded(seeded_demo: dict[str, str]) -> None:
     assert isinstance(deps.get_llm_client(), GuardedLLMClient)
     assert isinstance(deps.get_query_llm_client(), GuardedLLMClient)
 

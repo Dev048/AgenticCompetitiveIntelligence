@@ -62,6 +62,11 @@
           <span>Strategic Insights</span>
         </a>
 
+        <a href="#/ask" class="nav-item" id="nav-ask">
+          <span class="nav-icon">🔎</span>
+          <span>Ask the Evidence</span>
+        </a>
+
         <a href="#/sources" class="nav-item" id="nav-sources">
           <span class="nav-icon">📡</span>
           <span>Sources</span>
@@ -104,11 +109,22 @@
         </div>
 
         <div class="header-actions">
-          <a href="#/workflows" class="btn btn-primary btn-sm">
+          <a href="#/workflows" class="btn btn-primary btn-sm demo-hidden">
             <span>+</span> Run Ingestion
           </a>
+          <a href="#/ask" class="btn btn-primary btn-sm">🔎 Ask the Evidence</a>
         </div>
       </header>
+
+      <!-- Public demo notice (shown when the API reports environment=demo) -->
+      <div class="demo-banner" id="demo-banner" role="note" hidden>
+        <span><strong>Read-only demo with fictional data.</strong>
+        Companies, prices and people are invented, and live queries are rate-limited.</span>
+        <span>Start here:
+          <a href="#/insights?tab=recommendations">Recommendations → Trace to sources</a> ·
+          <a href="#/ask">Ask the Evidence</a>
+        </span>
+      </div>
 
       <!-- Dynamic Content Viewport -->
       <div class="content-viewport" id="content-viewport">
