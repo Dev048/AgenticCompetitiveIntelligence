@@ -10,7 +10,8 @@ starts from an empty database and vector store so the call sequence matches a fr
     python scripts/seed_demo.py --record --database-url sqlite+aiosqlite:///./rec.db \
         --qdrant-path ./rec-qdrant
 
-Embeddings default to BGE-M3, the demo's provider: prompts depend on what retrieval returns.
+Embeddings default to fastembed (bge-small), the demo's provider: prompts depend on what
+retrieval returns, so record and replay must use the same embedder.
 """
 
 import argparse
@@ -32,9 +33,14 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument("--fixtures", type=Path, default=None, help="fixture file path")
     parser.add_argument(
         "--embedding-provider",
-        choices=["bge_m3", "mock"],
-        default="bge_m3",
-        help="must match the demo when recording (default: bge_m3)",
+        choices=["fastembed", "bge_m3", "mock"],
+        default="fastembed",
+        help="must match the demo when recording (default: fastembed)",
+    )
+    parser.add_argument(
+        "--require-exact",
+        action="store_true",
+        help="replay only: fail unless every LLM call is an exact fixture hit (image builds)",
     )
     return parser.parse_args()
 
@@ -91,7 +97,13 @@ async def _main(args: argparse.Namespace) -> int:
     if args.record:
         client.store.save()
     print(json.dumps(summary.model_dump(), indent=2))
-    return 1 if summary.steps_failed else 0
+    if summary.steps_failed:
+        return 1
+    stats = summary.llm
+    if args.require_exact and not args.record and (stats.misses or stats.ordinal_hits):
+        print(f"Replay was not exact: {stats.model_dump()}. Re-record the fixtures.")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":

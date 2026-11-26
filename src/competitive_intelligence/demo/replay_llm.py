@@ -1,7 +1,7 @@
 """Record/replay LLM client used to seed the public demo without spending LLM quota.
 
-The demo is seeded on every boot (the Spaces disk is ephemeral). Calling the real LLM
-each time would burn the free-tier quota and make the demo depend on provider uptime, so
+The demo workspace is seeded when the demo image is built (and again at boot only if
+the baked data is missing). Calling the real LLM each time would burn the free-tier quota and make the demo depend on provider uptime, so
 LLM responses are recorded once against the real provider and committed as fixtures.
 
 Prompts are not byte-identical between boots: version/chunk IDs are random UUIDs and

@@ -77,8 +77,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             raise
         logger.warning("Vector store collection notice", error=str(err))
 
-    # 4. Public demo: seed the read-only workspace from recorded LLM fixtures. Idempotent and
-    #    re-run on every boot because the Spaces disk is ephemeral.
+    # 4. Public demo: seed the read-only workspace from recorded LLM fixtures. Idempotent:
+    #    the demo image ships pre-seeded data, so this only skips completed runs; it seeds
+    #    from scratch only if the baked data is missing.
     if settings.environment == "demo" and settings.demo_seed_on_startup:
         await _seed_demo(settings)
 
