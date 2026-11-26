@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from competitive_intelligence.agentic_rag.contradictions import find_numeric_conflicts
 from competitive_intelligence.agentic_rag.graph.state import AgenticGraphState
 from competitive_intelligence.agentic_rag.llm.interfaces import BaseLLMClient
 from competitive_intelligence.agentic_rag.models import (
@@ -88,12 +89,27 @@ class VerifyEvidenceNode:
             )
         evidence_block = "\n".join(evidence_lines)
 
+        # Deterministic-first: numeric claims that differ across documents are detected
+        # without the LLM. The LLM is given them to interpret, and they are kept in the
+        # assessment even if the LLM does not repeat them.
+        numeric_conflicts = find_numeric_conflicts(accumulated_results)
+
         user_prompt = (
             f"Original Query: {original_query}\n"
             f"Current Hop: {hop_count}\n"
             f"Accumulated Evidence Chunks ({len(accumulated_results)} total):\n"
             f"{evidence_block}"
         )
+        if numeric_conflicts:
+            conflict_lines = "\n".join(
+                f"- {c.describe()} chunk_ids={c.chunk_ids} excerpts={c.excerpts}"
+                for c in numeric_conflicts
+            )
+            user_prompt += (
+                "\n\nDeterministic consistency check (rule-based, not an LLM) found these "
+                "differing numeric observations across sources. Take them into account when "
+                f"judging consistency:\n{conflict_lines}"
+            )
 
         assessment = await self.llm_client.generate_structured(
             prompt=user_prompt,
@@ -113,6 +129,22 @@ class VerifyEvidenceNode:
                         claim_description=claim.claim_description,
                         conflicting_chunk_ids=valid_ids,
                         rationale=claim.rationale,
+                    )
+                )
+
+        for conflict in numeric_conflicts:
+            conflict_ids = [cid for cid in conflict.chunk_ids if cid in valid_chunk_ids]
+            already_reported = any(
+                set(conflict_ids) <= set(claim.conflicting_chunk_ids)
+                for claim in sanitized_contradictions
+            )
+            if len(conflict_ids) >= 2 and not already_reported:
+                sanitized_contradictions.append(
+                    ContradictionClaim(
+                        claim_description=conflict.describe(),
+                        conflicting_chunk_ids=conflict_ids,
+                        rationale="Detected by the deterministic numeric consistency check: "
+                        + " | ".join(conflict.excerpts),
                     )
                 )
 
