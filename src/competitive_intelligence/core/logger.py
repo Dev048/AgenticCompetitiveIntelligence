@@ -1,5 +1,6 @@
 """Structured logging configuration with context propagation and secret redaction."""
 
+from collections.abc import MutableMapping
 from contextvars import ContextVar
 import logging
 import re
@@ -50,7 +51,7 @@ def redact_sensitive_value(val: Any) -> Any:
 
 
 def redact_sensitive_processor(
-    logger: Any, method_name: str, event_dict: dict[str, Any]
+    logger: Any, method_name: str, event_dict: MutableMapping[str, Any]
 ) -> dict[str, Any]:
     """Structlog processor that scrubs sensitive fields and masks API keys."""
     redacted_dict: dict[str, Any] = {}
@@ -91,9 +92,11 @@ def configure_logging(log_level: str = "INFO", log_format: str = "json") -> None
     """Configure structured or standard library logging with sensitive data redaction."""
     level = getattr(logging, log_level.upper(), logging.INFO)
     use_json = log_format.lower() == "json" or (log_level.upper() != "DEBUG" and log_format.lower() != "console")
-    renderer = structlog.processors.JSONRenderer() if use_json else structlog.dev.ConsoleRenderer()
 
     if HAS_STRUCTLOG:
+        renderer = (
+            structlog.processors.JSONRenderer() if use_json else structlog.dev.ConsoleRenderer()
+        )
         structlog.configure(
             processors=[
                 structlog.contextvars.merge_contextvars,

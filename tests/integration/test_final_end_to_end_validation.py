@@ -25,6 +25,7 @@ Validates the complete 19-step orchestration and data flow across all platform s
 import asyncio
 from datetime import datetime, timezone
 from typing import Any
+from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
@@ -83,8 +84,10 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-async def db_manager_fixture() -> DatabaseSessionManager:
-    manager = DatabaseSessionManager(database_url="sqlite+aiosqlite:///:memory:")
+async def db_manager_fixture(tmp_path: Path) -> DatabaseSessionManager:
+    # File-backed SQLite: background workflow runs and polling requests must not share
+    # one StaticPool connection (concurrent session rollbacks drop in-flight writes).
+    manager = DatabaseSessionManager(database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     await manager.create_tables()
     return manager
 
