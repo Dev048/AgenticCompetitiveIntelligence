@@ -7,6 +7,7 @@ submission, 10-layer provenance retrieval, and error mapping over HTTP transport
 import asyncio
 from datetime import datetime, timezone
 import hashlib
+from pathlib import Path
 import pytest
 from httpx import ASGITransport, AsyncClient
 
@@ -122,9 +123,11 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-async def db_manager_fixture() -> DatabaseSessionManager:
+async def db_manager_fixture(tmp_path: Path) -> DatabaseSessionManager:
     """Fixture providing an isolated DatabaseSessionManager for setup in tests."""
-    manager = DatabaseSessionManager(database_url="sqlite+aiosqlite:///:memory:")
+    # File-backed SQLite: background workflow runs and polling requests must not share
+    # one StaticPool connection (concurrent session rollbacks drop in-flight writes).
+    manager = DatabaseSessionManager(database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     await manager.create_tables()
     return manager
 
