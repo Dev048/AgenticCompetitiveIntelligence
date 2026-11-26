@@ -49,6 +49,19 @@ class Settings(BaseSettings):
     llm_max_retries: int = Field(default=3, ge=0)
     llm_temperature: float = Field(default=0.0, ge=0.0, le=2.0)
 
+    # Live LLM call guard (all API-initiated LLM calls): concurrency cap, queue wait limit,
+    # and a cool-down after a provider 429 so a rate-limited free tier is not hammered.
+    llm_max_concurrency: int = Field(default=2, ge=1, le=32)
+    llm_queue_timeout_seconds: float = Field(default=10.0, gt=0.0, le=120.0)
+    llm_rate_limit_cooldown_seconds: float = Field(default=30.0, ge=0.0, le=600.0)
+
+    # Evidence query endpoint: deliberately small agentic budget per question.
+    query_max_llm_calls: int = Field(default=4, ge=1, le=20)
+    query_token_budget: int = Field(default=6000, ge=500)
+    query_max_hops: int = Field(default=2, ge=1, le=5)
+    query_timeout_seconds: float = Field(default=25.0, gt=0.0, le=120.0)
+    query_llm_max_retries: int = Field(default=1, ge=0, le=5)
+
     # Task Budgets
     max_llm_calls_per_task: int = Field(default=10, ge=1, le=50)
     max_retrieval_hops: int = Field(default=3, ge=1, le=10)

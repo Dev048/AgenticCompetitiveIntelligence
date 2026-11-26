@@ -9,6 +9,9 @@ from competitive_intelligence.application.services.decision_service import (
 from competitive_intelligence.application.services.document_service import (
     DocumentService,
 )
+from competitive_intelligence.application.services.evidence_query_service import (
+    EvidenceQueryService,
+)
 from competitive_intelligence.application.services.intelligence_service import (
     IntelligenceService,
 )
@@ -32,4 +35,5 @@ __all__ = [
     "DecisionService",
     "WorkflowExecutionService",
     "SourceMonitoringService",
+    "EvidenceQueryService",
 ]
