@@ -310,6 +310,38 @@
 }
 
 /* ==========================================================================
+   Demo banner
+   ========================================================================== */
+.demo-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin: 16px 28px 0;
+  padding: 10px 14px;
+  border: 1px solid var(--border-highlight);
+  border-radius: 8px;
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+.demo-banner strong { color: var(--text-primary); }
+.demo-banner a { color: var(--accent-cyan); font-weight: 600; text-decoration: none; }
+.demo-banner a:hover { text-decoration: underline; }
+.demo-banner[hidden] { display: none; }
+body.is-demo .demo-hidden { display: none !important; }
+/* Entry points to write actions the read-only demo blocks (the API would return 403). */
+body.is-demo #btn-add-competitor,
+body.is-demo #btn-empty-add-comp,
+body.is-demo #btn-create-context,
+body.is-demo #btn-empty-create-ctx,
+body.is-demo #btn-add-source,
+body.is-demo #btn-empty-add-src,
+body.is-demo #btn-dispatch-workflow,
+body.is-demo #btn-empty-dispatch { display: none !important; }
+
+/* ==========================================================================
    10-layer provenance trail
    ========================================================================== */
 .prov-intro {

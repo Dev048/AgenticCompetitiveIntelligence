@@ -87,7 +87,7 @@ export async function renderAsk(container) {
 
 function friendlyError(err) {
   if (err.status === 429) return err.message || 'Too many live queries right now. Please wait a moment and retry.';
-  if (err.status === 403) return err.message || 'This action is not permitted.';
+  if (err.status === 403) return err.message || 'This action is disabled in the read-only demo.';
   if (err.status === 422) return 'Please enter a question between 3 and 500 characters.';
   return `The query failed: ${err.message || 'unknown error'}`;
 }

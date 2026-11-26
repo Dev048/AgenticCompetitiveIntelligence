@@ -82,6 +82,7 @@ export async function initApp() {
 
     state.setHealth(health);
     updateHealthIndicator(health);
+    applyDemoMode(health);
 
     state.setWorkspaces(workspaces);
 
@@ -106,6 +107,13 @@ export async function initApp() {
 
   // Trigger initial route
   await router.handleRoute();
+}
+
+function applyDemoMode(health) {
+  if (health?.environment !== 'demo') return;
+  document.body.classList.add('is-demo');
+  const banner = document.getElementById('demo-banner');
+  if (banner) banner.hidden = false;
 }
 
 function updateHealthIndicator(health) {

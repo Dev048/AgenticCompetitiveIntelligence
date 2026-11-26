@@ -34,6 +34,9 @@ export async function renderDashboard(container) {
     const activeSources = sources.filter(s => s.monitoring_enabled);
     const healthySources = sources.filter(s => s.last_fetch_status === 'success');
     const runningWorkflows = workflows.filter(w => w.status === 'running' || w.status === 'resuming');
+    // In the public demo, sources are a pre-acquired static corpus that is never fetched, so
+    // fetch-health counts would read as failures.
+    const isStaticCorpus = health.environment === 'demo';
 
     // Build competitor map for quick lookup
     const compMap = new Map();
@@ -61,10 +64,15 @@ export async function renderDashboard(container) {
           </div>
           <div class="stat-card-value">${sources.length}</div>
           <div class="stat-card-footer">
-            <span class="badge ${healthySources.length === sources.length && sources.length > 0 ? 'badge-success' : 'badge-warning'}">
-              ${healthySources.length}/${sources.length} Healthy
-            </span>
-            <span><a href="#/sources" style="color:var(--text-muted); text-decoration:none;">${activeSources.length} polling &rarr;</a></span>
+            ${isStaticCorpus ? `
+              <span class="badge badge-neutral" title="Pre-acquired fictional documents; live crawling is disabled in the demo">Static demo corpus</span>
+              <span><a href="#/sources" style="color:var(--text-muted); text-decoration:none;">View sources &rarr;</a></span>
+            ` : `
+              <span class="badge ${healthySources.length === sources.length && sources.length > 0 ? 'badge-success' : 'badge-warning'}">
+                ${healthySources.length}/${sources.length} Healthy
+              </span>
+              <span><a href="#/sources" style="color:var(--text-muted); text-decoration:none;">${activeSources.length} polling &rarr;</a></span>
+            `}
           </div>
         </div>
 
@@ -226,6 +234,13 @@ export async function renderDashboard(container) {
               <a href="#/sources" class="btn btn-ghost btn-sm">All Sources &rarr;</a>
             </div>
 
+            ${isStaticCorpus ? `
+              <p style="color:var(--text-secondary); font-size:13px; line-height:1.55;">
+                This demo runs on a <strong>static corpus</strong> of ${sources.length} pre-acquired,
+                fictional documents. Live crawling and continuous monitoring are disabled here, so
+                there is no fetch health to report.
+              </p>
+            ` : `
             <div style="display:flex; flex-direction:column; gap:12px;">
               <div style="display:flex; justify-content:space-between; align-items:center;">
                 <span style="color:var(--text-secondary); font-size:13px;">Healthy Acquisition</span>
@@ -244,6 +259,7 @@ export async function renderDashboard(container) {
                 </span>
               </div>
             </div>
+            `}
 
             <div style="margin-top:14px;">
               <a href="#/sources" class="btn btn-secondary btn-sm" style="width:100%; justify-content:center;">
