@@ -24,3 +24,13 @@ scratch/
 *.db
 *.sqlite
 *.log
+
+# Not needed in images (keeps the build context and layers small)
+tests/
+docs/
+*.whl
+.env.*
+!.env.example
+DEMO_PLAN.md
+FINAL_PROJECT_COMPLETION_REPORT.md
+dist/
