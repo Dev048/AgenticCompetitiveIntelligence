@@ -62,6 +62,8 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "ci_knowledge_chunks"
     qdrant_timeout: int = Field(default=10, ge=1)
     qdrant_location: str | None = None
+    # Embedded (on-disk, in-process) Qdrant storage folder. Used by the single-container demo.
+    qdrant_path: str | None = None
 
     # Acquisition
     crawl4ai_headless: bool = True
@@ -150,6 +152,11 @@ class Settings(BaseSettings):
             if self.qdrant_location == ":memory:":
                 errors.append(
                     f"In-memory Qdrant (:memory:) is not permitted in {self.environment}. "
+                    "Configure external QDRANT_URL or QDRANT_HOST."
+                )
+            if self.qdrant_path:
+                errors.append(
+                    f"Embedded Qdrant (QDRANT_PATH) is not permitted in {self.environment}. "
                     "Configure external QDRANT_URL or QDRANT_HOST."
                 )
             if not self.qdrant_collection_name or not self.qdrant_collection_name.strip():

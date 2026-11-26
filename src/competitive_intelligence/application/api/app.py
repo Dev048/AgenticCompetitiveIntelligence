@@ -81,6 +81,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as err:
         logger.warning("Error during database shutdown", error=str(err))
 
+    try:
+        from competitive_intelligence.application.api.deps import reset_resource_caches
+
+        reset_resource_caches()
+    except Exception as err:
+        logger.warning("Error releasing cached resources", error=str(err))
+
     logger.info("Competitive Intelligence API service stopped")
 
 
