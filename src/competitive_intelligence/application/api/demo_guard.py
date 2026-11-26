@@ -185,8 +185,8 @@ def _seconds_until_utc_midnight(now: datetime) -> int:
 def client_key_for(request: Request, trusted_proxy_hops: int) -> str:
     """Identify the caller for per-client limits.
 
-    With ``trusted_proxy_hops`` reverse proxies in front of the app (Hugging Face Spaces
-    has one), each proxy appends the address it received the request from to
+    With ``trusted_proxy_hops`` reverse proxies in front of the app (assumed to be
+    one on Render), each proxy appends the address it received the request from to
     X-Forwarded-For. Entries to the left of those are client-supplied and spoofable, so the
     caller is the entry ``trusted_proxy_hops`` positions from the right. With no trusted
     proxies, the direct peer address is used.
