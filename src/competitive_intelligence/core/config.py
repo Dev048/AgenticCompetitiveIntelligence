@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     )
 
     # General & Network
-    environment: Literal["development", "staging", "production", "test"] = "development"
+    environment: Literal["development", "staging", "production", "test", "demo"] = "development"
     debug: bool = False
     log_level: str = "INFO"
     log_format: Literal["json", "console"] = "json"
@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     monitoring_lease_timeout_seconds: int = Field(default=300, ge=10)
     monitoring_heartbeat_interval_seconds: int = Field(default=60, ge=5)
 
+    # Public read-only demo (see DEMO_PLAN.md). DEMO_MODE blocks writes and rate-limits queries.
+    demo_mode: bool = False
+    demo_allow_recommendation_review: bool = True
+    demo_query_per_ip_per_minute: int = Field(default=5, ge=1, le=1000)
+    demo_query_daily_cap: int = Field(default=200, ge=1)
+    # Reverse proxies in front of the app that append to X-Forwarded-For (Spaces: 1).
+    demo_trusted_proxy_hops: int = Field(default=1, ge=0, le=5)
+
     @field_validator("openai_base_url", mode="before")
     @classmethod
     def normalize_openai_base_url(cls, value: str | None) -> str | None:
@@ -102,10 +110,30 @@ class Settings(BaseSettings):
             return self.qdrant_url.strip()
         return f"http://{self.qdrant_host}:{self.qdrant_port}"
 
-    def validate_production_configuration(self, raise_exception: bool = True) -> list[str]:
-        """Validate production requirements when environment is production or staging.
+    def _validate_real_model_providers(self, errors: list[str]) -> None:
+        """Reject mock LLM/embedding providers and require credentials for the active LLM."""
+        if self.llm_provider == "mock":
+            errors.append(
+                f"Mock LLM provider is not permitted in {self.environment}. "
+                "Configure 'openai' or 'anthropic' with valid credentials."
+            )
+        elif self.llm_provider == "openai":
+            if not self.openai_api_key or not self.openai_api_key.strip():
+                errors.append("OPENAI_API_KEY must be provided when llm_provider is 'openai'.")
+        elif self.llm_provider == "anthropic":
+            if not self.anthropic_api_key or not self.anthropic_api_key.strip():
+                errors.append("ANTHROPIC_API_KEY must be provided when llm_provider is 'anthropic'.")
 
-        Enforces:
+        if self.embedding_provider == "mock":
+            errors.append(
+                f"Mock embedding provider is not permitted in {self.environment}. "
+                "Configure 'bge_m3' for production embeddings."
+            )
+
+    def validate_production_configuration(self, raise_exception: bool = True) -> list[str]:
+        """Validate deployment requirements for production, staging and the public demo.
+
+        Production/staging enforce:
         - Debug mode is disabled.
         - Mock LLM provider is rejected.
         - API keys for active LLM provider are supplied.
@@ -113,8 +141,22 @@ class Settings(BaseSettings):
         - SQLite or in-memory database is rejected.
         - In-memory vector store is rejected.
         - Collection name is non-empty.
+
+        Demo (single container, public) enforces:
+        - Debug mode is disabled and DEMO_MODE is on (public deployments must be read-only).
+        - Real LLM and embedding providers (same rules as production).
+        - SQLite and embedded/in-memory Qdrant ARE permitted.
         """
         errors: list[str] = []
+
+        if self.environment == "demo":
+            if self.debug:
+                errors.append("DEBUG mode must be disabled in demo.")
+            if not self.demo_mode:
+                errors.append("DEMO_MODE must be enabled when ENVIRONMENT=demo (public read-only).")
+            self._validate_real_model_providers(errors)
+            if not self.qdrant_collection_name or not self.qdrant_collection_name.strip():
+                errors.append("QDRANT_COLLECTION_NAME must be specified.")
 
         if self.environment in ("production", "staging"):
             if self.debug:
@@ -128,25 +170,8 @@ class Settings(BaseSettings):
                     "A production PostgreSQL URL must be configured."
                 )
 
-            # LLM provider validation
-            if self.llm_provider == "mock":
-                errors.append(
-                    f"Mock LLM provider is not permitted in {self.environment}. "
-                    "Configure 'openai' or 'anthropic' with valid credentials."
-                )
-            elif self.llm_provider == "openai":
-                if not self.openai_api_key or not self.openai_api_key.strip():
-                    errors.append("OPENAI_API_KEY must be provided when llm_provider is 'openai'.")
-            elif self.llm_provider == "anthropic":
-                if not self.anthropic_api_key or not self.anthropic_api_key.strip():
-                    errors.append("ANTHROPIC_API_KEY must be provided when llm_provider is 'anthropic'.")
-
-            # Embedding provider validation
-            if self.embedding_provider == "mock":
-                errors.append(
-                    f"Mock embedding provider is not permitted in {self.environment}. "
-                    "Configure 'bge_m3' for production embeddings."
-                )
+            # LLM and embedding provider validation
+            self._validate_real_model_providers(errors)
 
             # Qdrant validation
             if self.qdrant_location == ":memory:":

@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 
+from competitive_intelligence.application.api.demo_guard import DemoReadOnlyMiddleware
 from competitive_intelligence.application.api.error_handlers import (
     register_exception_handlers,
 )
@@ -40,7 +41,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 2. Verify or initialize database schema
     db_manager = get_db_manager()
-    if settings.environment in ("development", "test"):
+    if settings.environment in ("development", "test", "demo"):
         try:
             await db_manager.create_tables()
             logger.info("Database schema initialized successfully")
@@ -117,6 +118,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(DemoReadOnlyMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
 

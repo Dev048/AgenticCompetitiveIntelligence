@@ -44,3 +44,16 @@ class DuplicateEntityError(CompetitiveIntelligenceError):
 
 class WorkspaceIsolationError(CompetitiveIntelligenceError):
     """Raised when attempting cross-workspace access or workspace boundary violation."""
+
+
+class RateLimitExceededError(CompetitiveIntelligenceError):
+    """Raised when a caller exceeds a configured request rate or daily quota."""
+
+    def __init__(
+        self,
+        message: str,
+        retry_after_seconds: int,
+        details: dict[str, object] | None = None,
+    ) -> None:
+        super().__init__(message, details)
+        self.retry_after_seconds = retry_after_seconds
