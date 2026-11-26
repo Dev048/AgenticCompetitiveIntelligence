@@ -98,6 +98,23 @@ def test_production_settings_validation_rejects_sqlite_database() -> None:
     assert "SQLite database is not permitted in production" in str(exc_info.value)
 
 
+@pytest.mark.parametrize("environment", ["production", "staging"])
+def test_production_settings_validation_rejects_embedded_qdrant(environment: str) -> None:
+    """Production and staging must use an external Qdrant, never QDRANT_PATH."""
+    settings = Settings(
+        environment=environment,
+        llm_provider="openai",
+        openai_api_key="sk-test-mock-key-12345",
+        embedding_provider="bge_m3",
+        database_url="postgresql+asyncpg://u:p@db:5432/ci",
+        qdrant_url="http://qdrant:6333",
+        qdrant_path="/tmp/qdrant",
+    )
+    with pytest.raises(ProductionConfigurationError) as exc_info:
+        settings.validate_production_configuration(raise_exception=True)
+    assert "Embedded Qdrant (QDRANT_PATH) is not permitted" in str(exc_info.value)
+
+
 def test_production_settings_validation_rejects_memory_qdrant() -> None:
     """Production environment must reject in-memory vector storage."""
     settings = Settings(

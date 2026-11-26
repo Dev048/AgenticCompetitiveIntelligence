@@ -290,7 +290,7 @@ def get_vector_store(
         )
         return QdrantVectorStore(config=store_config)
 
-    # Embedded on-disk Qdrant (single-container demo): one shared client per process
+    # Embedded on-disk Qdrant (single-process deployments): one shared client per process
     if cfg.qdrant_path:
         store_key = (cfg.qdrant_path, cfg.qdrant_collection_name)
         with _RESOURCE_CACHE_LOCK:

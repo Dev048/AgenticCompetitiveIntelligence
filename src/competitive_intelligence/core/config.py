@@ -62,7 +62,8 @@ class Settings(BaseSettings):
     qdrant_collection_name: str = "ci_knowledge_chunks"
     qdrant_timeout: int = Field(default=10, ge=1)
     qdrant_location: str | None = None
-    # Embedded (on-disk, in-process) Qdrant storage folder. Used by the single-container demo.
+    # Embedded (on-disk, in-process) Qdrant storage folder for single-process deployments.
+    # Rejected in production/staging, which must use an external Qdrant server.
     qdrant_path: str | None = None
 
     # Acquisition
