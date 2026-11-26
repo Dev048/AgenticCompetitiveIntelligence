@@ -18,7 +18,7 @@ __all__ = [
 
 def __getattr__(name: str) -> Any:
     # Crawl4AI pulls in Playwright/Chromium. Import it only when a crawler is actually
-    # requested, so the API (and the read-only demo image) can run without the
+    # requested, so the API (and slim images without Chromium) can run without the
     # "acquisition" extra installed.
     if name == "Crawl4AIClient":
         from competitive_intelligence.source_acquisition.providers.crawl4ai_client import (
