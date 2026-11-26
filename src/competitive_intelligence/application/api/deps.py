@@ -10,6 +10,11 @@ from competitive_intelligence.agentic_rag.llm import (
     BaseLLMClient,
     create_llm_client,
 )
+from competitive_intelligence.agentic_rag.llm.factory import llm_config_from_settings
+from competitive_intelligence.agentic_rag.llm.guarded_client import (
+    GuardedLLMClient,
+    get_llm_call_guard,
+)
 from competitive_intelligence.agentic_rag.retriever import AgenticRetriever
 from competitive_intelligence.agentic_rag.selective.controller import (
     SelectiveAgenticRetriever,
@@ -33,6 +38,7 @@ from competitive_intelligence.application.services import (
     CompetitorService,
     DecisionService,
     DocumentService,
+    EvidenceQueryService,
     IntelligenceService,
     SourceMonitoringService,
     SourceService,
@@ -385,7 +391,15 @@ def get_adaptive_retriever(
 
 
 def get_llm_client() -> BaseLLMClient:
-    return create_llm_client()
+    """Live LLM client for API-initiated work, under the process-wide call guard."""
+    return GuardedLLMClient(create_llm_client(), get_llm_call_guard())
+
+
+def get_query_llm_client() -> BaseLLMClient:
+    """Live LLM client for interactive queries: fewer provider retries (fail fast, degrade)."""
+    settings = get_settings()
+    inner = create_llm_client(llm_config_from_settings(max_retries=settings.query_llm_max_retries))
+    return GuardedLLMClient(inner, get_llm_call_guard())
 
 
 def get_agentic_retriever(
@@ -407,6 +421,32 @@ def get_production_retriever(
         adaptive_retriever=ad_ret,
         agentic_retriever=ag_ret,
     )
+
+
+def get_query_retriever(
+    adaptive_retriever: AdaptiveRetriever = Depends(get_adaptive_retriever),
+    llm_client: BaseLLMClient = Depends(get_query_llm_client),
+) -> SelectiveAgenticRetriever:
+    """Selective retriever for interactive queries with a deliberately small agentic budget."""
+    ad_ret = get_adaptive_retriever() if isinstance(adaptive_retriever, DependsClass) else adaptive_retriever
+    client = get_query_llm_client() if isinstance(llm_client, DependsClass) else llm_client
+    settings = get_settings()
+    agentic = AgenticRetriever(
+        executor_retriever=ad_ret,
+        llm_client=client,
+        max_hops=settings.query_max_hops,
+        max_llm_calls=settings.query_max_llm_calls,
+        task_token_budget=settings.query_token_budget,
+        timeout_seconds=settings.query_timeout_seconds,
+    )
+    return SelectiveAgenticRetriever(adaptive_retriever=ad_ret, agentic_retriever=agentic)
+
+
+def get_evidence_query_service(
+    retriever: SelectiveAgenticRetriever = Depends(get_query_retriever),
+) -> EvidenceQueryService:
+    ret = get_query_retriever() if isinstance(retriever, DependsClass) else retriever
+    return EvidenceQueryService(retriever=ret)
 
 
 def get_retrieval_stage(

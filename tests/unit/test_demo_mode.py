@@ -197,8 +197,7 @@ def test_every_mutating_route_is_blocked_except_the_allow_list() -> None:
     allowed = {(m, p) for m, p in routes if is_write_allowed_in_demo(m, p, cfg)}
 
     assert len(routes) > len(_ALLOW_LIST)
-    assert allowed <= _ALLOW_LIST
-    assert ("PATCH", "/api/v1/workspaces/x/recommendations/x/status") in allowed
+    assert allowed == _ALLOW_LIST
 
 
 @pytest.mark.parametrize(

@@ -9,6 +9,7 @@ from competitive_intelligence.application.api.v1.endpoints import (
     events,
     health,
     insights,
+    query,
     recommendations,
     signals,
     sources,
@@ -29,3 +30,4 @@ api_v1_router.include_router(insights.router)
 api_v1_router.include_router(decisions.router)
 api_v1_router.include_router(recommendations.router)
 api_v1_router.include_router(workflows.router)
+api_v1_router.include_router(query.router)
