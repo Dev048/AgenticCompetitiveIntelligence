@@ -4,8 +4,8 @@
 **Version:** 1.0.0-GA  
 **Release Date:** November 4, 2026  
 **Engineering Status:** Complete, Fully Integrated & Validated  
-**Test Suite:** 731 / 731 Tests Passing (100% Pass Rate)  
-**Type Safety:** Strict Mypy Compliant (`0 errors in 201 source files`)  
+**Test Suite:** 787 / 787 Tests Passing (100% Pass Rate, excluding the 2 tests marked `integration` that need live Crawl4AI or Qdrant)  
+**Type Safety:** Strict Mypy Compliant (`0 errors in 208 source files`)  
 
 ---
 
@@ -187,7 +187,7 @@ Recommendations are strictly advisory. The platform architecture prohibits auton
 
 1. **Initial Status**: All generated recommendations are created in the `PROPOSED` status.
 2. **Review Endpoints**:
-   - `PATCH /api/v1/workspaces/{id}/decision/recommendations/{rec_id}/review`
+   - `PATCH /api/v1/workspaces/{id}/recommendations/{rec_id}/status`
    - Allowed reviewer transitions: `PROPOSED` → `UNDER_REVIEW`, `PROPOSED` → `ACCEPTED`, `PROPOSED` → `REJECTED`.
 3. **State Invariance**: Once `ACCEPTED` or `REJECTED`, a recommendation cannot be modified back to `PROPOSED`. Invalid transitions are rejected with HTTP 400 Bad Request.
 
@@ -220,11 +220,11 @@ Recommendations are strictly advisory. The platform architecture prohibits auton
 Platform: Windows (Python 3.11.4)
 Pytest Plugins: anyio-4.12.1, langsmith-0.7.17
 
-Unit Tests:         657 passed (59.42s)
-Integration Tests:   74 passed (31.89s)
-Total Tests:        731 passed in 91.31s (100% pass rate)
+Unit Tests:         706 passed (99.69s)
+Integration Tests:   81 passed (44.81s), 2 deselected (need live Crawl4AI or Qdrant)
+Total Tests:        787 passed in 144.50s (100% pass rate, 2 live-service tests deselected)
 
-Mypy Analysis:      201 source files checked, 0 errors (strict mode)
+Mypy Analysis:      208 source files checked, 0 errors (strict mode)
 Docker Config:      Valid Compose configuration syntax verified
 ================================================================================
 ```

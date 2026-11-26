@@ -1,6 +1,7 @@
 """FastAPI Dependency Injection providers."""
 
 from collections.abc import AsyncGenerator
+import threading
 from fastapi import Depends, Path
 from fastapi.params import Depends as DependsClass
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,6 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from competitive_intelligence.agentic_rag.llm import (
     BaseLLMClient,
     create_llm_client,
+)
+from competitive_intelligence.agentic_rag.filters import BaseCompanyResolver
+from competitive_intelligence.agentic_rag.llm.factory import llm_config_from_settings
+from competitive_intelligence.agentic_rag.llm.guarded_client import (
+    GuardedLLMClient,
+    get_llm_call_guard,
 )
 from competitive_intelligence.agentic_rag.retriever import AgenticRetriever
 from competitive_intelligence.agentic_rag.selective.controller import (
@@ -32,6 +39,7 @@ from competitive_intelligence.application.services import (
     CompetitorService,
     DecisionService,
     DocumentService,
+    EvidenceQueryService,
     IntelligenceService,
     SourceMonitoringService,
     SourceService,
@@ -55,6 +63,9 @@ from competitive_intelligence.intelligence import (
     LLMStrategicInterpreter,
     RetrievedEvidenceAnalyzer,
 )
+from competitive_intelligence.infrastructure.database.repositories.company_resolver import (
+    SqlCompanyResolver,
+)
 from competitive_intelligence.infrastructure.database.session import (
     DatabaseSessionManager,
     get_db_manager,
@@ -72,6 +83,7 @@ from competitive_intelligence.knowledge_pipeline.ingestion_service import (
     KnowledgeIngestionService,
 )
 from competitive_intelligence.knowledge_pipeline.interfaces import (
+    BaseEmbeddingProvider,
     BaseVectorStore,
 )
 from competitive_intelligence.knowledge_pipeline.models import (
@@ -111,6 +123,32 @@ from competitive_intelligence.retrieval_engine.routing.adaptive_retriever import
 from competitive_intelligence.retrieval_engine.routing.router import (
     DeterministicRetrievalRouter,
 )
+
+
+# Process-wide singletons for heavy or exclusive resources.
+# - BGE-M3 weights are ~2.2GB: loading them per request is prohibitively slow.
+# - Embedded (path-based) Qdrant holds an exclusive lock on its storage folder, so only
+#   one client instance per process may exist.
+_EMBEDDING_PROVIDER_CACHE: dict[tuple[str, str, int], BaseEmbeddingProvider] = {}
+_EMBEDDED_VECTOR_STORE_CACHE: dict[tuple[str, str], QdrantVectorStore] = {}
+# Sync dependencies run in FastAPI's threadpool: guard first-time construction so two
+# concurrent first requests cannot load the model twice or double-open the Qdrant folder.
+_RESOURCE_CACHE_LOCK = threading.Lock()
+
+
+def reset_resource_caches() -> None:
+    """Drop cached singletons (used by tests and graceful shutdown)."""
+    with _RESOURCE_CACHE_LOCK:
+        _close_and_clear_caches()
+
+
+def _close_and_clear_caches() -> None:
+    for store in _EMBEDDED_VECTOR_STORE_CACHE.values():
+        close = getattr(getattr(store, "_client", None), "close", None)
+        if callable(close):
+            close()
+    _EMBEDDED_VECTOR_STORE_CACHE.clear()
+    _EMBEDDING_PROVIDER_CACHE.clear()
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -229,11 +267,16 @@ def get_embedding_service(
             BGEM3EmbeddingProvider,
         )
 
-        provider = BGEM3EmbeddingProvider(
-            model_name=cfg.embedding_model,
-            device=cfg.embedding_device,
-            batch_size=cfg.embedding_batch_size,
-        )
+        cache_key = (cfg.embedding_model, cfg.embedding_device, cfg.embedding_batch_size)
+        with _RESOURCE_CACHE_LOCK:
+            provider = _EMBEDDING_PROVIDER_CACHE.get(cache_key)
+            if provider is None:
+                provider = BGEM3EmbeddingProvider(
+                    model_name=cfg.embedding_model,
+                    device=cfg.embedding_device,
+                    batch_size=cfg.embedding_batch_size,
+                )
+                _EMBEDDING_PROVIDER_CACHE[cache_key] = provider
         return EmbeddingService(provider=provider)
 
     # Lightweight mock embedding provider for fast testing/dev
@@ -256,6 +299,25 @@ def get_vector_store(
             location=None,
         )
         return QdrantVectorStore(config=store_config)
+
+    # Embedded on-disk Qdrant (single-process deployments): one shared client per process
+    if cfg.qdrant_path:
+        store_key = (cfg.qdrant_path, cfg.qdrant_collection_name)
+        with _RESOURCE_CACHE_LOCK:
+            embedded = _EMBEDDED_VECTOR_STORE_CACHE.get(store_key)
+            if embedded is None:
+                embedded = QdrantVectorStore(
+                    config=VectorStoreConfig(
+                        collection_name=cfg.qdrant_collection_name,
+                        vector_dimensions=1024,
+                        distance_metric=DistanceMetric.COSINE,
+                        location=None,
+                        path=cfg.qdrant_path,
+                        timeout=cfg.qdrant_timeout,
+                    )
+                )
+                _EMBEDDED_VECTOR_STORE_CACHE[store_key] = embedded
+        return embedded
 
     # In development, connect to remote Qdrant if explicit URL or remote host is set
     if cfg.qdrant_url or (cfg.qdrant_host != "localhost" and cfg.qdrant_location != ":memory:"):
@@ -332,8 +394,21 @@ def get_adaptive_retriever(
     )
 
 
+def get_company_resolver() -> BaseCompanyResolver:
+    """Resolves LLM-proposed company filters to stored competitor IDs."""
+    return SqlCompanyResolver(get_db_manager().sessionmaker)
+
+
 def get_llm_client() -> BaseLLMClient:
-    return create_llm_client()
+    """Live LLM client for API-initiated work, under the process-wide call guard."""
+    return GuardedLLMClient(create_llm_client(), get_llm_call_guard())
+
+
+def get_query_llm_client() -> BaseLLMClient:
+    """Live LLM client for interactive queries: fewer provider retries (fail fast, degrade)."""
+    settings = get_settings()
+    inner = create_llm_client(llm_config_from_settings(max_retries=settings.query_llm_max_retries))
+    return GuardedLLMClient(inner, get_llm_call_guard())
 
 
 def get_agentic_retriever(
@@ -342,7 +417,11 @@ def get_agentic_retriever(
 ) -> BaseRetriever:
     ret = get_adaptive_retriever() if isinstance(adaptive_retriever, DependsClass) else adaptive_retriever
     client = get_llm_client() if isinstance(llm_client, DependsClass) else llm_client
-    return AgenticRetriever(executor_retriever=ret, llm_client=client)
+    return AgenticRetriever(
+        executor_retriever=ret,
+        llm_client=client,
+        company_resolver=get_company_resolver(),
+    )
 
 
 def get_production_retriever(
@@ -355,6 +434,33 @@ def get_production_retriever(
         adaptive_retriever=ad_ret,
         agentic_retriever=ag_ret,
     )
+
+
+def get_query_retriever(
+    adaptive_retriever: AdaptiveRetriever = Depends(get_adaptive_retriever),
+    llm_client: BaseLLMClient = Depends(get_query_llm_client),
+) -> SelectiveAgenticRetriever:
+    """Selective retriever for interactive queries with a deliberately small agentic budget."""
+    ad_ret = get_adaptive_retriever() if isinstance(adaptive_retriever, DependsClass) else adaptive_retriever
+    client = get_query_llm_client() if isinstance(llm_client, DependsClass) else llm_client
+    settings = get_settings()
+    agentic = AgenticRetriever(
+        executor_retriever=ad_ret,
+        llm_client=client,
+        max_hops=settings.query_max_hops,
+        max_llm_calls=settings.query_max_llm_calls,
+        task_token_budget=settings.query_token_budget,
+        timeout_seconds=settings.query_timeout_seconds,
+        company_resolver=get_company_resolver(),
+    )
+    return SelectiveAgenticRetriever(adaptive_retriever=ad_ret, agentic_retriever=agentic)
+
+
+def get_evidence_query_service(
+    retriever: SelectiveAgenticRetriever = Depends(get_query_retriever),
+) -> EvidenceQueryService:
+    ret = get_query_retriever() if isinstance(retriever, DependsClass) else retriever
+    return EvidenceQueryService(retriever=ret)
 
 
 def get_retrieval_stage(

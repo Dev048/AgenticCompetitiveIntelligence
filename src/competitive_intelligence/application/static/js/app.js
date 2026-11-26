@@ -10,6 +10,8 @@ import { renderDashboard } from './views/dashboard.js';
 import { renderCompetitors } from './views/competitors.js';
 import { renderSources } from './views/sources.js';
 import { renderIntelligence } from './views/intelligence.js';
+import { renderStrategicInsights } from './views/insights.js';
+import { renderAsk } from './views/ask.js';
 import { renderDecisions } from './views/decisions.js';
 import { renderWorkflows } from './views/workflows.js';
 
@@ -17,11 +19,14 @@ export async function initApp() {
   const router = new Router();
 
   // Register views
+  router.register('/overview', renderDashboard);
   router.register('/dashboard', renderDashboard);
   router.register('/competitors', renderCompetitors);
   router.register('/sources', renderSources);
   router.register('/intelligence', renderIntelligence);
-  router.register('/decisions', renderDecisions);
+  router.register('/insights', renderStrategicInsights);
+  router.register('/ask', renderAsk);
+  router.register('/decisions', renderStrategicInsights);
   router.register('/workflows', renderWorkflows);
 
   // Setup Global Workspace Selector

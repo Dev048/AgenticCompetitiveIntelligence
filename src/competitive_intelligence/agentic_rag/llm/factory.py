@@ -8,6 +8,37 @@ from competitive_intelligence.agentic_rag.llm.openai_client import OpenAILLMClie
 from competitive_intelligence.core.config import get_settings
 
 
+def llm_config_from_settings(max_retries: int | None = None) -> LLMConfig:
+    """Build the LLMConfig for the configured provider (optionally overriding retries)."""
+    settings = get_settings()
+    provider_val = getattr(settings, "llm_provider", "openai")
+    try:
+        provider = LLMProvider(str(provider_val).lower())
+    except ValueError:
+        provider = LLMProvider.OPENAI
+
+    if provider == LLMProvider.ANTHROPIC:
+        model_name = settings.anthropic_model
+        api_key = settings.anthropic_api_key
+        base_url = None
+    else:
+        model_name = settings.default_llm_model
+        api_key = settings.openai_api_key
+        base_url = settings.openai_base_url
+
+    return LLMConfig(
+        provider=provider,
+        model=model_name,
+        api_key=api_key,
+        base_url=base_url,
+        timeout_seconds=getattr(settings, "llm_timeout_seconds", 30.0),
+        max_retries=(
+            max_retries if max_retries is not None else getattr(settings, "llm_max_retries", 3)
+        ),
+        temperature=getattr(settings, "llm_temperature", 0.0),
+    )
+
+
 def create_llm_client(config: LLMConfig | None = None) -> BaseLLMClient:
     """Create a configured BaseLLMClient instance based on settings or supplied config.
 
@@ -20,30 +51,7 @@ def create_llm_client(config: LLMConfig | None = None) -> BaseLLMClient:
     settings = get_settings()
 
     if config is None:
-        provider_val = getattr(settings, "llm_provider", "openai")
-        try:
-            provider = LLMProvider(str(provider_val).lower())
-        except ValueError:
-            provider = LLMProvider.OPENAI
-
-        if provider == LLMProvider.ANTHROPIC:
-            model_name = settings.anthropic_model
-            api_key = settings.anthropic_api_key
-            base_url = None
-        else:
-            model_name = settings.default_llm_model
-            api_key = settings.openai_api_key
-            base_url = settings.openai_base_url
-
-        config = LLMConfig(
-            provider=provider,
-            model=model_name,
-            api_key=api_key,
-            base_url=base_url,
-            timeout_seconds=getattr(settings, "llm_timeout_seconds", 30.0),
-            max_retries=getattr(settings, "llm_max_retries", 3),
-            temperature=getattr(settings, "llm_temperature", 0.0),
-        )
+        config = llm_config_from_settings()
 
     if config.provider == LLMProvider.MOCK:
         if settings.environment == "production":

@@ -3,9 +3,7 @@
 A production-grade, evidence-grounded strategic competitive intelligence and decision-support platform. It continuously tracks competitor actions across websites, pricing structures, documentation, and platform sources, transforming raw market signals into auditable, prescriptive strategic recommendations subject to strict human operator boundaries.
 
 [![Python](https://img.shields.io/badge/Python-3.11+-blue.svg)](https://www.python.org/)
-[![Tests](https://img.shields.io/badge/Tests-731%20Passed-brightgreen.svg)]()
-[![Type-Check](https://img.shields.io/badge/Mypy-Strict%20(201%20files)-blue.svg)]()
-[![Status](https://img.shields.io/badge/Status-Production%20Ready-success.svg)]()
+[![Type-Check](https://img.shields.io/badge/mypy-strict-blue.svg)](pyproject.toml)
 
 ---
 
@@ -111,14 +109,14 @@ flowchart TD
 
 | Subsystem | Source Path | Description |
 | :--- | :--- | :--- |
-| **Source Acquisition** | [`src/competitive_intelligence/source_acquisition/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/source_acquisition/) | Multi-source crawlers (`Crawl4AI`), social adapters, rate limiters, ToS governance. |
-| **Knowledge Pipeline** | [`src/competitive_intelligence/knowledge_pipeline/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/knowledge_pipeline/) | Normalization, change detection, semantic chunking, `BGE-M3` embeddings, `Qdrant` vector storage. |
-| **Retrieval Engine** | [`src/competitive_intelligence/retrieval_engine/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/retrieval_engine/) | Sparse BM25, dense vector search, Reciprocal Rank Fusion (RRF), cross-encoder reranking. |
-| **Agentic RAG** | [`src/competitive_intelligence/agentic_rag/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/agentic_rag/) | Multi-hop query decomposition, sufficiency checking, contradiction detection, bounded reasoning. |
-| **Intelligence** | [`src/competitive_intelligence/intelligence/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/intelligence/) | Event analysis, signal inference, strategic insight generation with multi-dimensional confidence. |
-| **Decision Support** | [`src/competitive_intelligence/decision_support/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/decision_support/) | Option evaluation, hard constraint filtering, prescriptive proposal assembly (`PROPOSED`). |
-| **Continuous Monitoring** | [`src/competitive_intelligence/monitoring/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/monitoring/) | Background scheduler daemon, lease acquisition, distributed heartbeat, worker failover. |
-| **Application & UI** | [`src/competitive_intelligence/application/`](file:///c:/programming/agentic_ai/competitive_intelligence/src/competitive_intelligence/application/) | FastAPI REST endpoints, web dashboard, operator review workflows, Prometheus `/metrics`. |
+| **Source Acquisition** | [`src/competitive_intelligence/source_acquisition/`](src/competitive_intelligence/source_acquisition/) | Multi-source crawlers (`Crawl4AI`), social adapters, rate limiters, ToS governance. |
+| **Knowledge Pipeline** | [`src/competitive_intelligence/knowledge_pipeline/`](src/competitive_intelligence/knowledge_pipeline/) | Normalization, change detection, semantic chunking, `BGE-M3` embeddings, `Qdrant` vector storage. |
+| **Retrieval Engine** | [`src/competitive_intelligence/retrieval_engine/`](src/competitive_intelligence/retrieval_engine/) | Sparse BM25, dense vector search, Reciprocal Rank Fusion (RRF), cross-encoder reranking. |
+| **Agentic RAG** | [`src/competitive_intelligence/agentic_rag/`](src/competitive_intelligence/agentic_rag/) | Multi-hop query decomposition, sufficiency checking, contradiction detection, bounded reasoning. |
+| **Intelligence** | [`src/competitive_intelligence/intelligence/`](src/competitive_intelligence/intelligence/) | Event analysis, signal inference, strategic insight generation with multi-dimensional confidence. |
+| **Decision Support** | [`src/competitive_intelligence/decision_support/`](src/competitive_intelligence/decision_support/) | Option evaluation, hard constraint filtering, prescriptive proposal assembly (`PROPOSED`). |
+| **Continuous Monitoring** | [`src/competitive_intelligence/monitoring/`](src/competitive_intelligence/monitoring/) | Background scheduler daemon, lease acquisition, distributed heartbeat, worker failover. |
+| **Application & UI** | [`src/competitive_intelligence/application/`](src/competitive_intelligence/application/) | FastAPI REST endpoints, web dashboard, operator review workflows, Prometheus `/metrics`. |
 
 ---
 
@@ -144,25 +142,25 @@ curl http://localhost:8000/health
 python -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# 2. Install dependencies
-pip install -e ".[dev]"
+# 2. Install dependencies (runtime extras + dev tools)
+pip install -e ".[all]"
 
-# 3. Run regression test suite (731 tests)
+# 3. Run the test suite (hermetic: never reads your .env or calls a real LLM)
 python -m pytest tests/ -q
 
 # 4. Run static type checker
 python -m mypy src
 
 # 5. Start API server
-uvicorn competitive_intelligence.application.main:app --host 0.0.0.0 --port 8000 --reload
+uvicorn competitive_intelligence.application.api.app:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ---
 
 ## API Endpoints & Interfaces
 
-- **API Documentation**: [`http://localhost:8000/docs`](http://localhost:8000/docs) (Swagger UI) & [`/redoc`](http://localhost:8000/redoc)
-- **Operator Web Dashboard**: [`http://localhost:8000/ui`](http://localhost:8000/ui)
+- **API Documentation**: [`http://localhost:8000/api/v1/docs`](http://localhost:8000/api/v1/docs) (Swagger UI) & [`/api/v1/redoc`](http://localhost:8000/api/v1/redoc)
+- **Operator Web Dashboard**: [`http://localhost:8000/`](http://localhost:8000/)
 - **Prometheus Metrics**: [`http://localhost:8000/metrics`](http://localhost:8000/metrics)
 - **Health Probes**: [`http://localhost:8000/health`](http://localhost:8000/health), [`/health/live`](http://localhost:8000/health/live), [`/health/ready`](http://localhost:8000/health/ready)
 
@@ -171,27 +169,28 @@ uvicorn competitive_intelligence.application.main:app --host 0.0.0.0 --port 8000
 - `POST /api/v1/workspaces/{id}/competitors`: Register tracked competitor.
 - `POST /api/v1/workspaces/{id}/sources`: Configure monitored web or platform source.
 - `POST /api/v1/workspaces/{id}/workflows/runs`: Trigger multi-stage ingestion & intelligence pipeline.
-- `GET  /api/v1/workspaces/{id}/decision/recommendations`: List strategic recommendations (`PROPOSED`).
-- `PATCH /api/v1/workspaces/{id}/decision/recommendations/{rec_id}/review`: Operator review (`ACCEPTED` or `REJECTED`).
-- `GET  /api/v1/workspaces/{id}/decision/recommendations/{rec_id}/provenance`: Reconstruct 10-layer provenance DAG.
+- `POST /api/v1/workspaces/{id}/query`: Evidence query with an agentic trace (escalation decision, sub-queries, verification, contradictions).
+- `GET  /api/v1/workspaces/{id}/recommendations`: List strategic recommendations (`PROPOSED`).
+- `PATCH /api/v1/workspaces/{id}/recommendations/{rec_id}/status`: Operator review (`ACCEPTED` or `REJECTED`).
+- `GET  /api/v1/workspaces/{id}/recommendations/{rec_id}/provenance`: Reconstruct the 10-layer provenance chain with per-layer details.
 
 ---
 
 ## Testing & Quality Assurance
 
-- **Full Regression Suite**: 731 tests passing across unit and integration suites.
-- **Automated End-to-End Validation**: [`tests/integration/test_final_end_to_end_validation.py`](file:///c:/programming/agentic_ai/competitive_intelligence/tests/integration/test_final_end_to_end_validation.py) covers the complete 19-step lifecycle.
-- **Type Checking**: 100% strict `mypy` compliance across all 201 source files.
+- **Regression Suite**: unit and integration suites, hermetic by default (`tests/conftest.py` ignores `.env`; tests marked `integration` need a live Crawl4AI/Qdrant and can be skipped with `-m "not integration"`).
+- **Automated End-to-End Validation**: [`tests/integration/test_final_end_to_end_validation.py`](tests/integration/test_final_end_to_end_validation.py) covers the complete 19-step lifecycle.
+- **Type Checking**: strict `mypy` across `src/`.
 - **Zero Host Contamination**: Automated tests run with in-memory SQLite (`aiosqlite`) and Qdrant (`:memory:`), providing complete isolation and zero reliance on external daemons.
 
 ---
 
 ## Documentation
 
-- **Final System Validation**: [`docs/final_system_validation.md`](file:///c:/programming/agentic_ai/competitive_intelligence/docs/final_system_validation.md)
-- **Final Project Completion Report**: [`FINAL_PROJECT_COMPLETION_REPORT.md`](file:///c:/programming/agentic_ai/competitive_intelligence/FINAL_PROJECT_COMPLETION_REPORT.md)
-- **Architectural Rules & Invariants**: [`AGENTS.md`](file:///c:/programming/agentic_ai/competitive_intelligence/AGENTS.md)
-- **Detailed Subsystem Architecture**: [`docs/architecture.md`](file:///c:/programming/agentic_ai/competitive_intelligence/docs/architecture.md)
-- **Production Deployment Guide**: [`docs/deployment.md`](file:///c:/programming/agentic_ai/competitive_intelligence/docs/deployment.md)
-- **Observability Specification**: [`docs/observability.md`](file:///c:/programming/agentic_ai/competitive_intelligence/docs/observability.md)
-- **LLM Integration Specification**: [`docs/llm_integration.md`](file:///c:/programming/agentic_ai/competitive_intelligence/docs/llm_integration.md)
+- **Final System Validation**: [`docs/final_system_validation.md`](docs/final_system_validation.md)
+- **Final Project Completion Report**: [`FINAL_PROJECT_COMPLETION_REPORT.md`](FINAL_PROJECT_COMPLETION_REPORT.md)
+- **Architectural Rules & Invariants**: [`AGENTS.md`](AGENTS.md)
+- **Detailed Subsystem Architecture**: [`docs/architecture.md`](docs/architecture.md)
+- **Production Deployment Guide**: [`docs/deployment.md`](docs/deployment.md)
+- **Observability Specification**: [`docs/observability.md`](docs/observability.md)
+- **LLM Integration Specification**: [`docs/llm_integration.md`](docs/llm_integration.md)

@@ -3,8 +3,13 @@
  * Robust asynchronous client for Subsystem 6 REST endpoints.
  */
 
+export const API_CONFIG = {
+  baseUrl: window.VANTAGE_API_BASE || '/api/v1',
+  healthUrl: window.VANTAGE_HEALTH_URL || '/health',
+};
+
 export class ApiClient {
-  constructor(baseUrl = '/api/v1') {
+  constructor(baseUrl = API_CONFIG.baseUrl) {
     this.baseUrl = baseUrl;
   }
 
@@ -20,9 +25,11 @@ export class ApiClient {
       ...options.headers,
     };
 
-    const url = endpoint.startsWith('http') || endpoint.startsWith('/health')
+    const url = endpoint.startsWith('http')
       ? endpoint
-      : `${this.baseUrl}${endpoint}`;
+      : endpoint.startsWith('/health')
+        ? API_CONFIG.healthUrl
+        : `${this.baseUrl}${endpoint}`;
 
     try {
       const response = await fetch(url, {
@@ -41,6 +48,7 @@ export class ApiClient {
           errorData.detail || errorData.message || `API Error: ${response.status} ${response.statusText}`
         );
         error.status = response.status;
+        error.code = errorData.error_code || null;
         error.data = errorData;
         throw error;
       }
@@ -51,7 +59,10 @@ export class ApiClient {
 
       return await response.json();
     } catch (err) {
-      console.error(`[API ERROR] ${options.method || 'GET'} ${url}:`, err);
+      // Expected client errors (rate limit, forbidden, validation, not found) are
+      // shown to the user by the calling view; only server/network failures are errors.
+      const log = err.status && err.status < 500 ? console.warn : console.error;
+      log(`[API] ${options.method || 'GET'} ${url}:`, err.message);
       throw err;
     }
   }
@@ -218,6 +229,14 @@ export class ApiClient {
     return this.request(
       `/workspaces/${encodeURIComponent(workspaceId)}/recommendations/${encodeURIComponent(recommendationId)}`
     );
+  }
+
+  // Evidence query (retrieval + bounded agentic RAG trace)
+  queryEvidence(workspaceId, payload) {
+    return this.request(`/workspaces/${encodeURIComponent(workspaceId)}/query`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    });
   }
 
   getRecommendationProvenance(workspaceId, recommendationId) {

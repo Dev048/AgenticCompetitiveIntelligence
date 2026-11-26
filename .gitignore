@@ -87,3 +87,6 @@ Thumbs.db
 *.whl
 scratch/
 *.log
+
+# Claude Code: personal, uncommitted settings
+.claude/settings.local.json

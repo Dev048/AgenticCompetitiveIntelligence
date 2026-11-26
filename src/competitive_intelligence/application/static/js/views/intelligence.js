@@ -1,6 +1,6 @@
 /**
- * VANTAGE // Intelligence View
- * Evidence-grounded Intelligence Events, Inferred Signals, and Strategic Insights.
+ * VANTAGE // Intelligence Feed View
+ * Evidence-grounded Intelligence Events and Inferred Strategic Signals.
  */
 
 import { api } from '../api.js';
@@ -10,19 +10,22 @@ export async function renderIntelligence(container, { query = {} } = {}) {
   const wsId = state.currentWorkspace?.workspace_id;
   if (!wsId) return;
 
-  const activeTab = query.tab || 'events';
+  const activeTab = query.tab === 'signals' ? 'signals' : 'events';
 
   container.innerHTML = `
     <div style="display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:12px;">
       <div>
-        <h2 style="font-family:var(--font-display); font-size:20px; font-weight:700;">Competitive Intelligence</h2>
-        <p style="color:var(--text-muted); font-size:13px;">Evidence-grounded taxonomy: Events &rarr; Signals &rarr; Strategic Insights</p>
+        <h2 style="font-family:var(--font-display); font-size:20px; font-weight:700;">Intelligence Feed</h2>
+        <p style="color:var(--text-muted); font-size:13px;">Evidence-grounded stream of verified market occurrences and multi-source strategic signals</p>
       </div>
       <div style="display:flex; align-items:center; gap:12px;">
         <select class="form-control" id="intel-filter-competitor" style="width:180px; padding:6px 12px; font-size:12px;">
           <option value="">All Competitors</option>
         </select>
         <input type="text" class="form-control" id="intel-search" placeholder="Search keywords..." style="width:200px; padding:6px 12px; font-size:12px;" />
+        <a href="#/insights" class="btn btn-secondary btn-sm" style="font-size:12px;">
+          <span>🧠</span> Strategic Insights &rarr;
+        </a>
       </div>
     </div>
 
@@ -36,14 +39,10 @@ export async function renderIntelligence(container, { query = {} } = {}) {
         <span>📶 Inferred Signals</span>
         <span class="badge badge-neutral" id="tab-count-signals">-</span>
       </button>
-      <button class="tab-btn ${activeTab === 'insights' ? 'active' : ''}" data-tab="insights">
-        <span>🧠 Strategic Insights</span>
-        <span class="badge badge-neutral" id="tab-count-insights">-</span>
-      </button>
     </div>
 
     <div id="intel-content-area">
-      <div class="skeleton skeleton-card"></div>
+      <div class="skeleton skeleton-card" style="height:350px;"></div>
     </div>
   `;
 
@@ -56,20 +55,20 @@ export async function renderIntelligence(container, { query = {} } = {}) {
   });
 
   try {
-    const [competitors, events, signals, insights] = await Promise.all([
-      api.getCompetitors(wsId),
-      api.getEvents(wsId, null, 100),
-      api.getSignals(wsId, null, 100),
-      api.getInsights(wsId, null, 100),
+    const [competitors, events, signals] = await Promise.all([
+      api.getCompetitors(wsId).catch(() => []),
+      api.getEvents(wsId, null, 100).catch(() => []),
+      api.getSignals(wsId, null, 100).catch(() => []),
     ]);
 
     const compMap = new Map();
     competitors.forEach(c => compMap.set(c.competitor_id, c.name));
 
     // Update counts
-    document.getElementById('tab-count-events').textContent = events.length;
-    document.getElementById('tab-count-signals').textContent = signals.length;
-    document.getElementById('tab-count-insights').textContent = insights.length;
+    const countEvEl = document.getElementById('tab-count-events');
+    const countSigEl = document.getElementById('tab-count-signals');
+    if (countEvEl) countEvEl.textContent = events.length;
+    if (countSigEl) countSigEl.textContent = signals.length;
 
     // Populate filter dropdown
     const compSelect = document.getElementById('intel-filter-competitor');
@@ -93,8 +92,6 @@ export async function renderIntelligence(container, { query = {} } = {}) {
         renderEventsTab(contentArea, events, compMap, selectedComp, searchQuery);
       } else if (activeTab === 'signals') {
         renderSignalsTab(contentArea, signals, compMap, selectedComp, searchQuery, events);
-      } else if (activeTab === 'insights') {
-        renderInsightsTab(contentArea, insights, compMap, selectedComp, searchQuery);
       }
     };
 
@@ -379,9 +376,14 @@ function openEventDrawer(event, compName) {
         </div>
       `;
     },
-    renderFooter: () => `
-      <button class="btn btn-secondary btn-sm" onclick="window.state.closeDrawer()">Close</button>
-    `,
+    renderFooter: (el) => {
+      el.innerHTML = `
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn btn-secondary btn-sm" id="btn-close-event-drawer">Close</button>
+        </div>
+      `;
+      el.querySelector('#btn-close-event-drawer')?.addEventListener('click', () => state.closeDrawer());
+    },
   });
 }
 
@@ -416,8 +418,13 @@ function openSignalDrawer(signal, compName, allEvents) {
         </div>
       `;
     },
-    renderFooter: () => `
-      <button class="btn btn-secondary btn-sm" onclick="window.state.closeDrawer()">Close</button>
-    `,
+    renderFooter: (el) => {
+      el.innerHTML = `
+        <div style="display:flex; justify-content:flex-end;">
+          <button class="btn btn-secondary btn-sm" id="btn-close-signal-drawer">Close</button>
+        </div>
+      `;
+      el.querySelector('#btn-close-signal-drawer')?.addEventListener('click', () => state.closeDrawer());
+    },
   });
 }

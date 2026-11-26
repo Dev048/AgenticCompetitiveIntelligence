@@ -131,8 +131,11 @@ def anyio_backend() -> str:
 
 
 @pytest.fixture
-async def db_manager_fixture() -> DatabaseSessionManager:
-    manager = DatabaseSessionManager(database_url="sqlite+aiosqlite:///:memory:")
+async def db_manager_fixture(tmp_path: Any) -> DatabaseSessionManager:
+    # File-backed SQLite: each session gets its own connection. In-memory SQLite uses a
+    # single shared StaticPool connection, so the polling request's session close/rollback
+    # can discard the background workflow's in-flight writes (flaky lost rows).
+    manager = DatabaseSessionManager(database_url=f"sqlite+aiosqlite:///{tmp_path / 'test.db'}")
     await manager.create_tables()
     return manager
 
