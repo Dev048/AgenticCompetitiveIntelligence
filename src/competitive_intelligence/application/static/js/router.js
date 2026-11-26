@@ -23,7 +23,7 @@ export class Router {
   }
 
   parseHash() {
-    const rawHash = window.location.hash.slice(1) || '/dashboard';
+    const rawHash = window.location.hash.slice(1) || '/overview';
     const [pathPart, queryPart] = rawHash.split('?');
     const path = pathPart.startsWith('/') ? pathPart : `/${pathPart}`;
 
@@ -39,7 +39,12 @@ export class Router {
   }
 
   async handleRoute() {
-    const { path, query } = this.parseHash();
+    let { path, query } = this.parseHash();
+    if (path === '/' || path === '/dashboard') {
+      path = '/overview';
+    } else if (path === '/decisions') {
+      path = '/insights';
+    }
     this.currentPath = path;
 
     // Update active nav links
@@ -47,7 +52,9 @@ export class Router {
     navLinks.forEach(link => {
       const href = link.getAttribute('href') || '';
       const linkPath = href.replace('#', '').split('?')[0];
-      if (linkPath === path || (path === '/' && linkPath === '/dashboard')) {
+      if (linkPath === path || (path === '/overview' && (linkPath === '/overview' || linkPath === '/dashboard'))) {
+        link.classList.add('active');
+      } else if (path === '/insights' && (linkPath === '/insights' || linkPath === '/decisions')) {
         link.classList.add('active');
       } else {
         link.classList.remove('active');
@@ -61,12 +68,21 @@ export class Router {
       breadcrumbRoot.textContent = state.currentWorkspace ? state.currentWorkspace.name : 'Workspace';
     }
     if (breadcrumbCurrent) {
-      const title = path.replace('/', '').replace(/_/g, ' ');
-      breadcrumbCurrent.textContent = title ? title.charAt(0).toUpperCase() + title.slice(1) : 'Dashboard';
+      const titleMap = {
+        '/overview': 'Overview',
+        '/dashboard': 'Overview',
+        '/competitors': 'Competitors',
+        '/intelligence': 'Intelligence Feed',
+        '/insights': 'Strategic Insights',
+        '/decisions': 'Strategic Insights',
+        '/sources': 'Sources',
+        '/workflows': 'Workflows',
+      };
+      breadcrumbCurrent.textContent = titleMap[path] || (path.replace('/', '').charAt(0).toUpperCase() + path.slice(2));
     }
 
     // Match route handler
-    const handler = this.routes[path] || this.routes['*'] || this.routes['/dashboard'];
+    const handler = this.routes[path] || this.routes['*'] || this.routes['/overview'];
     const viewport = document.getElementById('content-viewport');
     if (!viewport) return;
 

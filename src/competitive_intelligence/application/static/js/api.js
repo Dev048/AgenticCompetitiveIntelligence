@@ -3,8 +3,13 @@
  * Robust asynchronous client for Subsystem 6 REST endpoints.
  */
 
+export const API_CONFIG = {
+  baseUrl: window.VANTAGE_API_BASE || '/api/v1',
+  healthUrl: window.VANTAGE_HEALTH_URL || '/health',
+};
+
 export class ApiClient {
-  constructor(baseUrl = '/api/v1') {
+  constructor(baseUrl = API_CONFIG.baseUrl) {
     this.baseUrl = baseUrl;
   }
 
@@ -20,9 +25,11 @@ export class ApiClient {
       ...options.headers,
     };
 
-    const url = endpoint.startsWith('http') || endpoint.startsWith('/health')
+    const url = endpoint.startsWith('http')
       ? endpoint
-      : `${this.baseUrl}${endpoint}`;
+      : endpoint.startsWith('/health')
+        ? API_CONFIG.healthUrl
+        : `${this.baseUrl}${endpoint}`;
 
     try {
       const response = await fetch(url, {
