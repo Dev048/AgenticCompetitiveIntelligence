@@ -7,6 +7,29 @@ A production-grade, evidence-grounded strategic competitive intelligence and dec
 
 ---
 
+## Live Demo
+
+- **Live demo:** `<add your Hugging Face Space URL here>`
+- **2-minute walkthrough video:** `<add your recording link here>` (use this if the Space is waking up)
+
+The demo is a **read-only workspace with fictional data**: three invented competitors in a
+product-analytics market, seeded through the real pipeline on every boot. What to click:
+
+1. **Strategic Insights → Actionable Recommendations → "Trace to sources"**: follow one
+   `PROPOSED` recommendation down all 10 provenance layers to the exact quote, the SHA-256
+   hash of the document version, and the source URL.
+2. **Ask the Evidence**, mode **Agentic**, question *"Does the Northwind Free plan really
+   include 3 seats?"*: watch query analysis, sub-queries and verification run, including the
+   deterministic cross-document check that flags the pricing page and a customer review
+   disagreeing (3 seats vs 1).
+3. **Approve or reject** a recommendation: the human decision boundary. Nothing is ever
+   executed automatically. Everything else that writes (creating sources, crawling,
+   running workflows) is disabled in the demo.
+
+How the demo stays free and safe: see [Deploying the live demo](#deploying-the-live-demo).
+
+---
+
 ## Key Characteristics
 
 - **Production-First Agentic RAG**: Bounded query decomposition, sufficiency validation, and cross-source contradiction detection via deterministic state machine orchestration.
@@ -182,6 +205,47 @@ uvicorn competitive_intelligence.application.api.app:app --host 0.0.0.0 --port 8
 - **Automated End-to-End Validation**: [`tests/integration/test_final_end_to_end_validation.py`](tests/integration/test_final_end_to_end_validation.py) covers the complete 19-step lifecycle.
 - **Type Checking**: strict `mypy` across `src/`.
 - **Zero Host Contamination**: Automated tests run with in-memory SQLite (`aiosqlite`) and Qdrant (`:memory:`), providing complete isolation and zero reliance on external daemons.
+
+---
+
+## Deploying the live demo
+
+The public demo runs as **one container on the Hugging Face Spaces free CPU tier**
+([`Dockerfile.space`](Dockerfile.space)), at zero cost:
+
+- **Collapsed stack:** SQLite and an embedded, on-disk Qdrant (`QDRANT_PATH`) in `/tmp`, no
+  worker, no Crawl4AI/Chromium. `ENVIRONMENT=demo` allows exactly this and still rejects mock
+  LLMs and mock embeddings; production and staging validation are unchanged.
+- **Seeding without spending quota:** on every boot the demo workspace is rebuilt by the real
+  pipeline from a fictional corpus ([`demo/corpus.py`](src/competitive_intelligence/demo/corpus.py)).
+  LLM responses were recorded once against Groq and are replayed from
+  [`demo/fixtures/llm_replay.json`](src/competitive_intelligence/demo/fixtures/llm_replay.json),
+  with generated IDs remapped to the current boot so every citation stays grounded. Re-record
+  with `python scripts/seed_demo.py --record ...` (see the script docstring).
+- **Abuse limits:** `DEMO_MODE=true` returns a read-only 403 for every write except evidence
+  queries and recommendation review. Live queries are rate-limited per client and per day
+  (`DEMO_QUERY_PER_IP_PER_MINUTE`, `DEMO_QUERY_DAILY_CAP`); LLM calls share a concurrency cap
+  and back off after a provider 429, degrading to deterministic retrieval instead of failing.
+- **Model baked in:** BGE-M3 is downloaded at build time and the container runs with
+  `HF_HUB_OFFLINE=1`.
+
+Steps:
+
+1. Create a free Hugging Face Space (SDK: **Docker**) and a free Groq (or other
+   OpenAI-compatible) API key.
+2. In the Space settings add the secret `OPENAI_API_KEY` and the variables
+   `OPENAI_BASE_URL` (e.g. `https://api.groq.com/openai/v1`) and `DEFAULT_LLM_MODEL`.
+3. Build the Space bundle and push it to the Space repository:
+
+   ```bash
+   python scripts/build_space_bundle.py          # writes dist/space/
+   cd dist/space && git init && git add . && git commit -m "Deploy demo"
+   git push --force https://huggingface.co/spaces/<user>/<space> HEAD:main
+   ```
+
+Limits to expect: free Spaces sleep after about 48 hours idle and take a few minutes to
+wake; the disk resets on restart (the demo re-seeds itself); the free LLM quota is small,
+but the seeded pages never need it.
 
 ---
 

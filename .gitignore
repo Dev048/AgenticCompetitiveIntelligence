@@ -90,3 +90,5 @@ scratch/
 
 # Claude Code: personal, uncommitted settings
 .claude/settings.local.json
+# one-off override for the demo-fixture protection hook
+.claude/allow-fixture-edit

@@ -34,6 +34,14 @@ The evaluation and benchmark scripts are in `scripts/` (`evaluate_full_system.py
 - The BGE-M3 provider, the embedded Qdrant client (`QDRANT_PATH`) and `get_db_manager()` are process-wide singletons. Don't construct them per request.
 - Live LLM calls from the API go through `GuardedLLMClient`, which applies a concurrency cap, a bounded queue and a cool-down after a 429. The query endpoint uses a separate, smaller budget (`QUERY_*` settings) and degrades to deterministic retrieval instead of failing.
 
+## Public demo (`ENVIRONMENT=demo`)
+
+- `Dockerfile.space` is a single-container Hugging Face Space: SQLite plus embedded Qdrant in `/tmp`, BGE-M3 baked in, `HF_HUB_OFFLINE=1`, no Crawl4AI and no worker. `python scripts/build_space_bundle.py` assembles the Space repo in `dist/space/`.
+- Demo validation allows SQLite and embedded Qdrant but still rejects mock LLMs and mock embeddings, and requires `DEMO_MODE=true`. Production and staging rules are pinned by `tests/unit/test_demo_mode.py`.
+- `DEMO_MODE` (`application/api/demo_guard.py`) returns a 403 `DEMO_READ_ONLY` for every write except `POST .../query` and recommendation review. A test walks every OpenAPI route, so new write endpoints are blocked by default. Live queries are rate-limited per client and per day.
+- At startup the demo workspace is seeded by `demo/seed.py` from the fictional corpus in `demo/corpus.py`. It replays recorded LLM responses (`demo/fixtures/llm_replay.json`) and never calls the live LLM. Changing any LLM prompt, the corpus or the pipeline order can turn exact fixture hits into ordinal fallbacks or misses. In that case re-record with `scripts/seed_demo.py --record` and check that a fresh replay reports 15/15 exact hits.
+- `scripts/seed_demo.py` forces `ENVIRONMENT=development` and refuses to run unless the vector store is the embedded one. A local `.env` saying `production` would otherwise point it at a Qdrant server.
+
 ## Architecture (big picture)
 
 `AGENTS.md` lists six subsystems. The code also contains packages it does not describe:

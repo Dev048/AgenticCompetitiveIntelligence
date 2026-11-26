@@ -27,7 +27,8 @@ def client(
     reset_llm_call_guard()
     reset_query_rate_limiter()
     app = create_app()
-    app.dependency_overrides[deps.get_query_llm_client] = MockLLMClient
+    llm = MockLLMClient()
+    app.dependency_overrides[deps.get_query_llm_client] = lambda: llm
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()

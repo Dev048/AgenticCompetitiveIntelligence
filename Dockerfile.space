@@ -1,0 +1,84 @@
+# ==============================================================================
+# Public read-only demo image for Hugging Face Spaces (Docker SDK, free CPU tier)
+#
+# One container, one process, port 7860:
+# - SQLite + embedded Qdrant under /tmp/demo (the Spaces disk is ephemeral; the demo
+#   workspace is re-seeded from recorded LLM fixtures on every boot, no LLM calls).
+# - BGE-M3 is baked into the image at build time, so a cold start never downloads it.
+# - No Crawl4AI/Chromium and no monitoring worker: the demo never crawls.
+#
+# Required Space secrets/variables (never commit values):
+#   OPENAI_API_KEY   key for an OpenAI-compatible provider (e.g. Groq)
+#   OPENAI_BASE_URL  e.g. https://api.groq.com/openai/v1
+#   DEFAULT_LLM_MODEL
+# Build locally:  docker build -f Dockerfile.space -t ci-demo .
+# ==============================================================================
+
+FROM python:3.11-slim
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    HF_HOME=/opt/hf-cache
+
+# Spaces runs the container as uid 1000.
+RUN useradd -m -u 1000 user
+
+WORKDIR /home/user/app
+
+# CPU-only PyTorch first (the default wheel bundles ~2 GB of CUDA libraries).
+RUN pip install --index-url https://download.pytorch.org/whl/cpu "torch>=2.2.0"
+
+# Dependencies (cached separately from source changes): API + knowledge + agentic extras.
+COPY pyproject.toml README.md ./
+COPY src/competitive_intelligence/__init__.py src/competitive_intelligence/__init__.py
+RUN pip install ".[api,knowledge,agentic]" && pip uninstall -y competitive-intelligence
+
+# Bake BGE-M3: weights, config and tokenizer only (no ONNX export, ColBERT/sparse heads or
+# images). Pinned to the revision the demo's LLM fixtures were recorded with; the build
+# fails if the weights did not arrive, rather than shipping an image that cannot embed.
+ARG BGE_M3_REVISION=5617a9f61b028005a4858fdac845db406aefb181
+RUN python -c "import os, sys; \
+from huggingface_hub import snapshot_download; \
+path = snapshot_download('BAAI/bge-m3', revision='${BGE_M3_REVISION}', allow_patterns=[ \
+  'config.json', 'config_sentence_transformers.json', 'modules.json', \
+  'sentence_bert_config.json', 'special_tokens_map.json', 'tokenizer.json', \
+  'tokenizer_config.json', 'sentencepiece.bpe.model', '1_Pooling/config.json', \
+  'pytorch_model.bin']); \
+weights = os.path.join(path, 'pytorch_model.bin'); \
+ok = os.path.exists(weights) and os.path.getsize(weights) > 1_000_000_000; \
+print('BGE-M3 weights:', weights, ok); sys.exit(0 if ok else 1)" \
+    && chmod -R a+rX /opt/hf-cache
+
+# Application source.
+COPY --chown=user:user src/ src/
+RUN pip install --no-deps .
+
+USER user
+
+# Offline from here on: the model is already in the image.
+ENV HF_HUB_OFFLINE=1 \
+    TRANSFORMERS_OFFLINE=1 \
+    ENVIRONMENT=demo \
+    DEMO_MODE=true \
+    DEBUG=false \
+    LOG_FORMAT=json \
+    MONITORING_MODE=disabled \
+    EMBEDDING_PROVIDER=bge_m3 \
+    EMBEDDING_MODEL=/opt/hf-cache/hub/models--BAAI--bge-m3/snapshots/${BGE_M3_REVISION} \
+    EMBEDDING_DEVICE=cpu \
+    LLM_PROVIDER=openai \
+    DATABASE_URL=sqlite+aiosqlite:////tmp/demo/demo.db \
+    QDRANT_PATH=/tmp/demo/qdrant \
+    QDRANT_URL= \
+    DEMO_TRUSTED_PROXY_HOPS=1
+# --no-proxy-headers: client identity for rate limiting comes from the app's own
+# trusted-hop logic (DEMO_TRUSTED_PROXY_HOPS), not from client-supplied headers.
+
+EXPOSE 7860
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:7860/health/live', timeout=4).status == 200 else 1)"
+
+CMD ["sh", "-c", "mkdir -p /tmp/demo && exec uvicorn competitive_intelligence.application.api.app:app --host 0.0.0.0 --port 7860 --no-proxy-headers"]
