@@ -2,8 +2,8 @@
 
 **Date:** November 4, 2026  
 **Status:** VALIDATED & PRODUCTION-READY  
-**Automated Test Suite:** 731 / 731 Tests Passing (100% Pass Rate)  
-**Static Analysis:** Strict Mypy Compliant (201 Source Files, 0 Errors)  
+**Automated Test Suite:** 787 / 787 Tests Passing (100% Pass Rate, excluding the 2 tests marked `integration` that need live Crawl4AI or Qdrant)  
+**Static Analysis:** Strict Mypy Compliant (208 Source Files, 0 Errors)  
 
 ---
 
@@ -209,11 +209,11 @@ Validated services:
 Platform: Windows (Python 3.11.4)
 Pytest Plugins: anyio-4.12.1, langsmith-0.7.17
 
-Unit Tests:         657 passed (59.42s)
-Integration Tests:   74 passed (31.89s)
-Total Tests:        731 passed in 91.31s (100% pass rate)
+Unit Tests:         706 passed (99.69s)
+Integration Tests:   81 passed (44.81s), 2 deselected (need live Crawl4AI or Qdrant)
+Total Tests:        787 passed in 144.50s (100% pass rate, 2 live-service tests deselected)
 
-Mypy Analysis:      201 source files checked, 0 errors (strict mode)
+Mypy Analysis:      208 source files checked, 0 errors (strict mode)
 Docker Config:      Valid Compose configuration syntax verified
 ================================================================================
 ```
