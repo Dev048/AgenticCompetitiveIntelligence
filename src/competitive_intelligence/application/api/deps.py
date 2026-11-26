@@ -1,6 +1,7 @@
 """FastAPI Dependency Injection providers."""
 
 from collections.abc import AsyncGenerator
+import threading
 from fastapi import Depends, Path
 from fastapi.params import Depends as DependsClass
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -72,6 +73,7 @@ from competitive_intelligence.knowledge_pipeline.ingestion_service import (
     KnowledgeIngestionService,
 )
 from competitive_intelligence.knowledge_pipeline.interfaces import (
+    BaseEmbeddingProvider,
     BaseVectorStore,
 )
 from competitive_intelligence.knowledge_pipeline.models import (
@@ -111,6 +113,32 @@ from competitive_intelligence.retrieval_engine.routing.adaptive_retriever import
 from competitive_intelligence.retrieval_engine.routing.router import (
     DeterministicRetrievalRouter,
 )
+
+
+# Process-wide singletons for heavy or exclusive resources.
+# - BGE-M3 weights are ~2.2GB: loading them per request is prohibitively slow.
+# - Embedded (path-based) Qdrant holds an exclusive lock on its storage folder, so only
+#   one client instance per process may exist.
+_EMBEDDING_PROVIDER_CACHE: dict[tuple[str, str, int], BaseEmbeddingProvider] = {}
+_EMBEDDED_VECTOR_STORE_CACHE: dict[tuple[str, str], QdrantVectorStore] = {}
+# Sync dependencies run in FastAPI's threadpool: guard first-time construction so two
+# concurrent first requests cannot load the model twice or double-open the Qdrant folder.
+_RESOURCE_CACHE_LOCK = threading.Lock()
+
+
+def reset_resource_caches() -> None:
+    """Drop cached singletons (used by tests and graceful shutdown)."""
+    with _RESOURCE_CACHE_LOCK:
+        _close_and_clear_caches()
+
+
+def _close_and_clear_caches() -> None:
+    for store in _EMBEDDED_VECTOR_STORE_CACHE.values():
+        close = getattr(getattr(store, "_client", None), "close", None)
+        if callable(close):
+            close()
+    _EMBEDDED_VECTOR_STORE_CACHE.clear()
+    _EMBEDDING_PROVIDER_CACHE.clear()
 
 
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -229,11 +257,16 @@ def get_embedding_service(
             BGEM3EmbeddingProvider,
         )
 
-        provider = BGEM3EmbeddingProvider(
-            model_name=cfg.embedding_model,
-            device=cfg.embedding_device,
-            batch_size=cfg.embedding_batch_size,
-        )
+        cache_key = (cfg.embedding_model, cfg.embedding_device, cfg.embedding_batch_size)
+        with _RESOURCE_CACHE_LOCK:
+            provider = _EMBEDDING_PROVIDER_CACHE.get(cache_key)
+            if provider is None:
+                provider = BGEM3EmbeddingProvider(
+                    model_name=cfg.embedding_model,
+                    device=cfg.embedding_device,
+                    batch_size=cfg.embedding_batch_size,
+                )
+                _EMBEDDING_PROVIDER_CACHE[cache_key] = provider
         return EmbeddingService(provider=provider)
 
     # Lightweight mock embedding provider for fast testing/dev
@@ -256,6 +289,25 @@ def get_vector_store(
             location=None,
         )
         return QdrantVectorStore(config=store_config)
+
+    # Embedded on-disk Qdrant (single-container demo): one shared client per process
+    if cfg.qdrant_path:
+        store_key = (cfg.qdrant_path, cfg.qdrant_collection_name)
+        with _RESOURCE_CACHE_LOCK:
+            embedded = _EMBEDDED_VECTOR_STORE_CACHE.get(store_key)
+            if embedded is None:
+                embedded = QdrantVectorStore(
+                    config=VectorStoreConfig(
+                        collection_name=cfg.qdrant_collection_name,
+                        vector_dimensions=1024,
+                        distance_metric=DistanceMetric.COSINE,
+                        location=None,
+                        path=cfg.qdrant_path,
+                        timeout=cfg.qdrant_timeout,
+                    )
+                )
+                _EMBEDDED_VECTOR_STORE_CACHE[store_key] = embedded
+        return embedded
 
     # In development, connect to remote Qdrant if explicit URL or remote host is set
     if cfg.qdrant_url or (cfg.qdrant_host != "localhost" and cfg.qdrant_location != ":memory:"):
