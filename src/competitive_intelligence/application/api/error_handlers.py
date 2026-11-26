@@ -15,6 +15,7 @@ from competitive_intelligence.core.errors import (
     DuplicateEntityError,
     EntityNotFoundError,
     PipelineError,
+    RateLimitExceededError,
     RetrievalError,
     ValidationError as DomainValidationError,
     WorkspaceIsolationError,
@@ -104,6 +105,19 @@ def register_exception_handlers(app: FastAPI) -> None:
         )
         return JSONResponse(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS, content=error_resp.model_dump()
+        )
+
+    @app.exception_handler(RateLimitExceededError)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceededError) -> JSONResponse:
+        error_resp = StandardErrorResponse(
+            error_code="RATE_LIMITED",
+            message=str(exc.message),
+            correlation_id=_get_correlation_id(request),
+        )
+        return JSONResponse(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            content=error_resp.model_dump(),
+            headers={"Retry-After": str(exc.retry_after_seconds)},
         )
 
     @app.exception_handler(AcquisitionError)

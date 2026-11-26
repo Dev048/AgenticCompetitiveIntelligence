@@ -4,6 +4,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends
 
+from competitive_intelligence.application.api.demo_guard import enforce_query_rate_limit
 from competitive_intelligence.application.api.deps import (
     get_current_workspace,
     get_evidence_query_service,
@@ -30,6 +31,7 @@ _MAX_EVIDENCE_TEXT_CHARS = 1200
 async def query_evidence(
     workspace_id: str,
     payload: EvidenceQueryRequest,
+    _rate_limit: Annotated[None, Depends(enforce_query_rate_limit)],
     _ws: Annotated[Workspace, Depends(get_current_workspace)],
     service: Annotated[EvidenceQueryService, Depends(get_evidence_query_service)],
 ) -> EvidenceQueryResponse:
