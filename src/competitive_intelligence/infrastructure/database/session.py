@@ -1,5 +1,6 @@
 """Database session and async engine management for PostgreSQL persistence."""
 
+import threading
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
@@ -91,13 +92,39 @@ class DatabaseSessionManager:
             self._sessionmaker = None
 
 
+# One manager (engine + connection pool) per distinct database configuration per process.
+# Creating a manager per request built a new engine and pool on every request.
+_DB_MANAGER_CACHE: dict[tuple[str, int, int, int, bool], DatabaseSessionManager] = {}
+# Sync dependencies run in FastAPI's threadpool: guard first-time construction.
+_DB_MANAGER_LOCK = threading.Lock()
+
+
 def get_db_manager(settings: Settings | None = None) -> DatabaseSessionManager:
-    """Factory creating a DatabaseSessionManager from application Settings."""
+    """Return the process-wide DatabaseSessionManager for the configured database.
+
+    The engine is created lazily on first use; ``close()`` disposes the pool and the next
+    use transparently creates a new engine, so a cached manager stays valid after shutdown.
+    """
     cfg = settings or get_settings()
-    return DatabaseSessionManager(
-        database_url=cfg.database_url,
-        pool_size=cfg.db_pool_size,
-        max_overflow=cfg.db_max_overflow,
-        pool_timeout=cfg.db_pool_timeout,
-        echo=cfg.db_echo,
-    )
+    key = (cfg.database_url, cfg.db_pool_size, cfg.db_max_overflow, cfg.db_pool_timeout, cfg.db_echo)
+    with _DB_MANAGER_LOCK:
+        manager = _DB_MANAGER_CACHE.get(key)
+        if manager is None:
+            manager = DatabaseSessionManager(
+                database_url=cfg.database_url,
+                pool_size=cfg.db_pool_size,
+                max_overflow=cfg.db_max_overflow,
+                pool_timeout=cfg.db_pool_timeout,
+                echo=cfg.db_echo,
+            )
+            _DB_MANAGER_CACHE[key] = manager
+        return manager
+
+
+async def reset_db_managers() -> None:
+    """Dispose and forget all cached managers (tests and process shutdown)."""
+    with _DB_MANAGER_LOCK:
+        managers = list(_DB_MANAGER_CACHE.values())
+        _DB_MANAGER_CACHE.clear()
+    for manager in managers:
+        await manager.close()
