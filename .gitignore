@@ -87,3 +87,7 @@ Thumbs.db
 *.whl
 scratch/
 *.log
+
+# Claude Code: one-off override for the fixture-protection hook
+.claude/allow-fixture-edit
+.claude/settings.local.json
