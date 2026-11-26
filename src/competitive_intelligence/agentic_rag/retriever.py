@@ -6,6 +6,7 @@ from uuid import uuid4
 
 import time
 
+from competitive_intelligence.agentic_rag.filters import BaseCompanyResolver
 from competitive_intelligence.agentic_rag.graph.workflow import AgenticRAGWorkflow
 from competitive_intelligence.agentic_rag.llm.interfaces import BaseLLMClient
 from competitive_intelligence.agentic_rag.llm.mock_client import MockLLMClient
@@ -44,6 +45,7 @@ class AgenticRetriever(BaseRetriever):
         max_llm_calls: int | None = None,
         task_token_budget: int | None = None,
         timeout_seconds: float = 30.0,
+        company_resolver: BaseCompanyResolver | None = None,
     ) -> None:
         """Initialize AgenticRetriever.
 
@@ -66,6 +68,7 @@ class AgenticRetriever(BaseRetriever):
         self.max_llm_calls = max_llm_calls if max_llm_calls is not None else settings.max_llm_calls_per_task
         self.task_token_budget = task_token_budget if task_token_budget is not None else settings.task_token_budget
         self.timeout_seconds = timeout_seconds
+        self.company_resolver = company_resolver
 
         self._last_execution_state: AgenticRAGState | None = None
         self._last_budget_usage: Any = None
@@ -106,6 +109,7 @@ class AgenticRetriever(BaseRetriever):
                 retriever=self.executor_retriever,
                 llm_client=self.llm_client,
                 budget_tracker=budget_tracker,
+                company_resolver=self.company_resolver,
             )
 
             state = await asyncio.wait_for(
