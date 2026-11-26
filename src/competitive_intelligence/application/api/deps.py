@@ -10,6 +10,7 @@ from competitive_intelligence.agentic_rag.llm import (
     BaseLLMClient,
     create_llm_client,
 )
+from competitive_intelligence.agentic_rag.filters import BaseCompanyResolver
 from competitive_intelligence.agentic_rag.llm.factory import llm_config_from_settings
 from competitive_intelligence.agentic_rag.llm.guarded_client import (
     GuardedLLMClient,
@@ -61,6 +62,9 @@ from competitive_intelligence.intelligence import (
     LLMEvidenceInterpreter,
     LLMStrategicInterpreter,
     RetrievedEvidenceAnalyzer,
+)
+from competitive_intelligence.infrastructure.database.repositories.company_resolver import (
+    SqlCompanyResolver,
 )
 from competitive_intelligence.infrastructure.database.session import (
     DatabaseSessionManager,
@@ -390,6 +394,11 @@ def get_adaptive_retriever(
     )
 
 
+def get_company_resolver() -> BaseCompanyResolver:
+    """Resolves LLM-proposed company filters to stored competitor IDs."""
+    return SqlCompanyResolver(get_db_manager().sessionmaker)
+
+
 def get_llm_client() -> BaseLLMClient:
     """Live LLM client for API-initiated work, under the process-wide call guard."""
     return GuardedLLMClient(create_llm_client(), get_llm_call_guard())
@@ -408,7 +417,11 @@ def get_agentic_retriever(
 ) -> BaseRetriever:
     ret = get_adaptive_retriever() if isinstance(adaptive_retriever, DependsClass) else adaptive_retriever
     client = get_llm_client() if isinstance(llm_client, DependsClass) else llm_client
-    return AgenticRetriever(executor_retriever=ret, llm_client=client)
+    return AgenticRetriever(
+        executor_retriever=ret,
+        llm_client=client,
+        company_resolver=get_company_resolver(),
+    )
 
 
 def get_production_retriever(
@@ -438,6 +451,7 @@ def get_query_retriever(
         max_llm_calls=settings.query_max_llm_calls,
         task_token_budget=settings.query_token_budget,
         timeout_seconds=settings.query_timeout_seconds,
+        company_resolver=get_company_resolver(),
     )
     return SelectiveAgenticRetriever(adaptive_retriever=ad_ret, agentic_retriever=agentic)
 

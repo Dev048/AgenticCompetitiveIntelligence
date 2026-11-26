@@ -5,6 +5,7 @@ from uuid import uuid4
 
 from langgraph.graph import END, START, StateGraph
 
+from competitive_intelligence.agentic_rag.filters import BaseCompanyResolver
 from competitive_intelligence.agentic_rag.graph.state import AgenticGraphState
 from competitive_intelligence.agentic_rag.interfaces import BaseAgentWorkflow
 from competitive_intelligence.agentic_rag.llm.interfaces import BaseLLMClient
@@ -47,6 +48,7 @@ def build_agentic_rag_graph(
     retriever: BaseRetriever,
     llm_client: BaseLLMClient,
     budget_tracker: LLMBudgetTracker | None = None,
+    company_resolver: BaseCompanyResolver | None = None,
 ) -> Any:
     """Assemble and compile the bounded LangGraph state machine.
     
@@ -61,7 +63,7 @@ def build_agentic_rag_graph(
 
     # Initialize nodes
     workflow.add_node("analyze_query", QueryAnalysisNode(llm_client, budget_tracker))
-    workflow.add_node("execute_subqueries", ExecuteSubqueriesNode(retriever, budget_tracker))
+    workflow.add_node("execute_subqueries", ExecuteSubqueriesNode(retriever, budget_tracker, company_resolver))
     workflow.add_node("verify_evidence", VerifyEvidenceNode(llm_client, budget_tracker))
     workflow.add_node("corrective_retrieval", CorrectiveRetrievalNode())
 
@@ -94,11 +96,14 @@ class AgenticRAGWorkflow(BaseAgentWorkflow):
         retriever: BaseRetriever,
         llm_client: BaseLLMClient,
         budget_tracker: LLMBudgetTracker | None = None,
+        company_resolver: BaseCompanyResolver | None = None,
     ) -> None:
         self.retriever = retriever
         self.llm_client = llm_client
         self.budget_tracker = budget_tracker
-        self.graph = build_agentic_rag_graph(retriever, llm_client, budget_tracker)
+        self.graph = build_agentic_rag_graph(
+            retriever, llm_client, budget_tracker, company_resolver
+        )
 
     async def run(
         self,
