@@ -79,6 +79,7 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 competitive_intelligence = [
+    "demo/fixtures/*.json",
     "application/static/*.html",
     "application/static/css/*.css",
     "application/static/js/*.js",

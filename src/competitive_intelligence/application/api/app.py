@@ -10,6 +10,7 @@ from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 
+from competitive_intelligence.application.api.demo_guard import DemoReadOnlyMiddleware
 from competitive_intelligence.application.api.error_handlers import (
     register_exception_handlers,
 )
@@ -21,7 +22,7 @@ from competitive_intelligence.application.api.v1.endpoints.health import (
     router as health_router,
 )
 from competitive_intelligence.application.api.v1.router import api_v1_router
-from competitive_intelligence.core.config import get_settings
+from competitive_intelligence.core.config import Settings, get_settings
 from competitive_intelligence.core.logger import configure_logging, get_logger
 from competitive_intelligence.core.metrics import (
     generate_prometheus_metrics,
@@ -44,7 +45,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # 2. Verify or initialize database schema
     db_manager = get_db_manager()
-    if settings.environment in ("development", "test"):
+    if settings.environment in ("development", "test", "demo"):
         try:
             await db_manager.create_tables()
             logger.info("Database schema initialized successfully")
@@ -76,6 +77,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             raise
         logger.warning("Vector store collection notice", error=str(err))
 
+    # 4. Public demo: seed the read-only workspace from recorded LLM fixtures. Idempotent and
+    #    re-run on every boot because the Spaces disk is ephemeral.
+    if settings.environment == "demo" and settings.demo_seed_on_startup:
+        await _seed_demo(settings)
+
     yield
 
     # Shutdown hooks
@@ -93,6 +99,28 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Error releasing cached resources", error=str(err))
 
     logger.info("Competitive Intelligence API service stopped")
+
+
+async def _seed_demo(settings: Settings) -> None:
+    from competitive_intelligence.demo.seed import load_replay_client, seed_demo_workspace
+
+    fixtures = Path(settings.demo_llm_fixtures_path) if settings.demo_llm_fixtures_path else None
+    try:
+        summary = await seed_demo_workspace(llm_client=load_replay_client(fixtures))
+    except Exception as err:
+        # Never take the demo down because seeding failed: health and UI still come up and
+        # the failure is visible in the logs.
+        logger.error("Demo seeding failed", error=str(err), exc_info=True)
+        return
+    logger.info(
+        "Demo workspace ready",
+        workspace_id=summary.workspace_id,
+        steps_run=summary.steps_run,
+        steps_skipped=summary.steps_skipped,
+        steps_failed=summary.steps_failed,
+        llm_replay=summary.llm.model_dump(),
+        duration_seconds=summary.duration_seconds,
+    )
 
 
 def create_app() -> FastAPI:
@@ -121,6 +149,7 @@ def create_app() -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+    app.add_middleware(DemoReadOnlyMiddleware)
     app.add_middleware(RequestLoggingMiddleware)
     app.add_middleware(CorrelationIdMiddleware)
 
