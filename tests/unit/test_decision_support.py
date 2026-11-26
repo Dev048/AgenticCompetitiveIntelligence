@@ -207,6 +207,34 @@ async def test_explicit_objective_weights_produce_justified_recommendation(
 
 
 @pytest.mark.anyio
+async def test_no_supporting_events_declines_to_recommend(
+    analyzer: DeterministicDecisionAnalyzer,
+) -> None:
+    """Options without any event grounding must not yield a recommendation (or crash)."""
+    context = DecisionContext(
+        title="Ungrounded Pricing Response",
+        decision_domain=DecisionDomain.PRICING,
+        business_objectives=[
+            DecisionObjective(
+                name="Aggressive Growth",
+                dimension=ObjectiveDimension.GROWTH,
+                target_description="Maximize user acquisition.",
+                priority_weight=0.9,
+            ),
+        ],
+    )
+
+    options, rec = await analyzer.analyze_and_recommend(
+        context=context,
+        insights=[],
+        events=[],
+    )
+
+    assert options
+    assert rec is None
+
+
+@pytest.mark.anyio
 async def test_hard_constraint_eliminates_infeasible_options(
     analyzer: DeterministicDecisionAnalyzer,
 ) -> None:

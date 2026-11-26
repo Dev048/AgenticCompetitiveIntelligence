@@ -76,6 +76,9 @@ all = [
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+competitive_intelligence = ["demo/fixtures/*.json"]
+
 [tool.ruff]
 target-version = "py311"
 line-length = 100

@@ -3,6 +3,7 @@
 from datetime import datetime, timezone
 from typing import Any
 
+from competitive_intelligence.core.logger import get_logger
 from competitive_intelligence.decision_support.interfaces import (
     BaseDecisionAnalyzer,
     BaseOptionGenerator,
@@ -36,6 +37,8 @@ from competitive_intelligence.intelligence.models import (
     IntelligenceEvent,
     SeverityLevel,
 )
+
+logger = get_logger(__name__)
 
 
 class RuleBasedOptionGenerator(BaseOptionGenerator):
@@ -549,6 +552,17 @@ class DeterministicDecisionAnalyzer(BaseDecisionAnalyzer):
             supporting_events.extend(ins.supporting_event_ids)
         supporting_events.extend(selected_option.supporting_event_ids)
         supporting_events = list(dict.fromkeys(supporting_events))
+
+        # Provenance invariant: a recommendation must be backed by at least one detected
+        # event. Without one, return the evaluated options but decline to recommend rather
+        # than emit an ungrounded recommendation.
+        if not supporting_events:
+            logger.warning(
+                "Declining to recommend: no supporting events for selected option",
+                decision_id=context.decision_id,
+                option_id=selected_option.option_id,
+            )
+            return candidate_options, None
 
         supporting_evidence: list[str] = list(selected_option.supporting_evidence_ids)
         for ins in insights:

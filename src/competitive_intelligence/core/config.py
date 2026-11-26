@@ -93,6 +93,9 @@ class Settings(BaseSettings):
     demo_query_daily_cap: int = Field(default=200, ge=1)
     # Reverse proxies in front of the app that append to X-Forwarded-For (Spaces: 1).
     demo_trusted_proxy_hops: int = Field(default=1, ge=0, le=5)
+    # Seed the demo workspace at startup from recorded LLM fixtures (never the live LLM).
+    demo_seed_on_startup: bool = True
+    demo_llm_fixtures_path: str | None = None
 
     @field_validator("openai_base_url", mode="before")
     @classmethod
