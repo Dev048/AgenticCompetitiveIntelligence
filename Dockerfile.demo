@@ -1,0 +1,75 @@
+# ==============================================================================
+# Public read-only demo image for Render's free tier (512 MB RAM, 0.1 CPU, ephemeral disk)
+#
+# One container, one process, bound to $PORT (Render sets it; default 10000):
+# - fastembed (ONNX, BAAI/bge-small-en-v1.5) instead of BGE-M3: no torch, no
+#   sentence-transformers, no Crawl4AI. BGE-M3 remains the production default.
+# - The demo workspace is seeded at BUILD time from the recorded LLM fixtures (no LLM
+#   calls) and shipped in the image. At boot it is copied to /tmp so the one allowed write
+#   (operator review) works; that copy resets whenever Render restarts the instance.
+# - The fastembed model is baked in and the container runs offline (HF_HUB_OFFLINE=1).
+#
+# Required Render secret (never commit values): OPENAI_API_KEY. See render.yaml.
+# Build locally:  docker build -f Dockerfile.demo -t ci-demo .
+# Re-record fixtures (same Linux image, so retrieval and prompts match the build):
+#   docker build -f Dockerfile.demo --target base -t ci-demo-base .
+#   (then run scripts/seed_demo.py --record inside it; see README "Deploy to Render")
+# ==============================================================================
+
+FROM python:3.11-slim AS base
+
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    FASTEMBED_CACHE_PATH=/opt/fastembed-cache
+
+RUN useradd -m -u 1000 app
+WORKDIR /app
+
+# Dependencies first (cached separately from source changes): the `demo` extra only.
+COPY pyproject.toml README.md ./
+COPY src/competitive_intelligence/__init__.py src/competitive_intelligence/__init__.py
+RUN pip install ".[demo]" && pip uninstall -y competitive-intelligence
+
+# Bake the embedding model; the build fails if it cannot be loaded.
+ARG FASTEMBED_MODEL=BAAI/bge-small-en-v1.5
+RUN python -c "from fastembed import TextEmbedding; m = TextEmbedding('${FASTEMBED_MODEL}'); \
+assert len(list(m.embed(['ok']))[0]) == 384" \
+    && chmod -R a+rX /opt/fastembed-cache
+
+COPY src/ src/
+COPY scripts/seed_demo.py scripts/seed_demo.py
+RUN pip install --no-deps .
+
+FROM base AS runtime
+
+# Seed at build time from the committed fixtures: replay only, offline, and only exact
+# fixture hits are accepted (otherwise the fixtures are stale and must be re-recorded).
+RUN HF_HUB_OFFLINE=1 python scripts/seed_demo.py --require-exact \
+        --database-url sqlite+aiosqlite:////app/demo-data/demo.db \
+        --qdrant-path /app/demo-data/qdrant \
+    && chmod -R a+rX /app/demo-data
+
+USER app
+
+ENV HF_HUB_OFFLINE=1 \
+    ENVIRONMENT=demo \
+    DEMO_MODE=true \
+    DEBUG=false \
+    LOG_FORMAT=json \
+    MONITORING_MODE=disabled \
+    EMBEDDING_PROVIDER=fastembed \
+    FASTEMBED_THREADS=1 \
+    OMP_NUM_THREADS=1 \
+    LLM_PROVIDER=openai \
+    DATABASE_URL=sqlite+aiosqlite:////tmp/demo/demo.db \
+    QDRANT_PATH=/tmp/demo/qdrant \
+    QDRANT_URL= \
+    DEMO_TRUSTED_PROXY_HOPS=1
+
+# Copy the baked data to the writable /tmp (skipped if already there). If the copy is
+# missing, the app's idempotent startup seeding rebuilds it from the fixtures.
+# --no-proxy-headers: client identity for rate limiting comes from the app's own
+# trusted-hop logic (DEMO_TRUSTED_PROXY_HOPS), never from uvicorn trusting X-Forwarded-*.
+CMD ["sh", "-c", "mkdir -p /tmp/demo && { [ -f /tmp/demo/demo.db ] || cp -a /app/demo-data/. /tmp/demo/ || true; } && exec uvicorn competitive_intelligence.application.api.app:app --host 0.0.0.0 --port \"${PORT:-10000}\" --no-proxy-headers"]

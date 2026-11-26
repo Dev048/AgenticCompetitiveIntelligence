@@ -1,0 +1,35 @@
+# Render Blueprint for the public read-only demo (free web service, Docker).
+# Create it from the Render Dashboard: New > Blueprint, pick this repository; Render
+# prompts for the values marked `sync: false`. Non-secret defaults are listed below.
+services:
+  - type: web
+    runtime: docker
+    name: competitive-intelligence-demo
+    plan: free
+    branch: demo
+    dockerfilePath: ./Dockerfile.demo
+    dockerContext: .
+    healthCheckPath: /health/live
+    autoDeploy: true
+    envVars:
+      # Secret: an OpenAI-compatible key (e.g. a free Groq key). Never commit it.
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: DEFAULT_LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: REASONING_LLM_MODEL
+        value: openai/gpt-oss-120b
+      - key: ENVIRONMENT
+        value: demo
+      - key: DEMO_MODE
+        value: "true"
+      - key: DEMO_QUERY_PER_IP_PER_MINUTE
+        value: "5"
+      - key: DEMO_QUERY_DAILY_CAP
+        value: "200"
+      # Render does not document its proxy chain; 1 assumes a single load balancer that
+      # appends the client IP to X-Forwarded-For. Confirm against a live deploy.
+      - key: DEMO_TRUSTED_PROXY_HOPS
+        value: "1"

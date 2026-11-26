@@ -9,8 +9,13 @@ A production-grade, evidence-grounded strategic competitive intelligence and dec
 
 ## Live Demo
 
-- **Live demo:** `<add your Hugging Face Space URL here>`
-- **2-minute walkthrough video:** `<add your recording link here>` (use this if the Space is waking up)
+- **Live demo:** `<add your live demo URL here>`
+- **2-minute walkthrough video:** `<add your recording link here>` (use this if the free instance is waking up, which can take 2 to 3 minutes)
+
+> **About the live demo's embeddings:** the live demo uses a small embedding model
+> (`BAAI/bge-small-en-v1.5` via fastembed) so it can run on a free 512 MB host. BGE-M3 is the
+> production default, and all benchmark and evaluation numbers in this repository were
+> produced with BGE-M3. Retrieval quality in the live demo is somewhat lower.
 
 The demo is a **read-only workspace with fictional data**: three invented competitors in a
 product-analytics market, seeded through the real pipeline on every boot. What to click:
@@ -26,7 +31,7 @@ product-analytics market, seeded through the real pipeline on every boot. What t
    executed automatically. Everything else that writes (creating sources, crawling,
    running workflows) is disabled in the demo.
 
-How the demo stays free and safe: see [Deploying the live demo](#deploying-the-live-demo).
+How the demo stays free and safe: see [Deploy to Render](#deploy-to-render).
 
 ---
 
@@ -208,44 +213,50 @@ uvicorn competitive_intelligence.application.api.app:app --host 0.0.0.0 --port 8
 
 ---
 
-## Deploying the live demo
+## Deploy to Render
 
-The public demo runs as **one container on the Hugging Face Spaces free CPU tier**
-([`Dockerfile.space`](Dockerfile.space)), at zero cost:
+The public demo is one container on Render's free tier (512 MB RAM, 0.1 CPU), built from
+[`Dockerfile.demo`](Dockerfile.demo) and described by the Blueprint [`render.yaml`](render.yaml):
 
-- **Collapsed stack:** SQLite and an embedded, on-disk Qdrant (`QDRANT_PATH`) in `/tmp`, no
-  worker, no Crawl4AI/Chromium. `ENVIRONMENT=demo` allows exactly this and still rejects mock
-  LLMs and mock embeddings; production and staging validation are unchanged.
-- **Seeding without spending quota:** on every boot the demo workspace is rebuilt by the real
-  pipeline from a fictional corpus ([`demo/corpus.py`](src/competitive_intelligence/demo/corpus.py)).
-  LLM responses were recorded once against Groq and are replayed from
-  [`demo/fixtures/llm_replay.json`](src/competitive_intelligence/demo/fixtures/llm_replay.json),
-  with generated IDs remapped to the current boot so every citation stays grounded. Re-record
-  with `python scripts/seed_demo.py --record ...` (see the script docstring).
+- **Small footprint:** only the `demo` extra is installed (no torch, sentence-transformers or
+  Crawl4AI). Embeddings come from fastembed's ONNX `bge-small-en-v1.5`; production keeps BGE-M3.
+  SQLite and an embedded Qdrant replace the database and vector servers, and there is no worker.
+- **Pre-seeded at build time:** `docker build` runs the real pipeline over a fictional corpus
+  ([`demo/corpus.py`](src/competitive_intelligence/demo/corpus.py)), replaying LLM responses that
+  were recorded once against Groq
+  ([`demo/fixtures/llm_replay.json`](src/competitive_intelligence/demo/fixtures/llm_replay.json)).
+  The build fails unless every replayed call is an exact match. The seeded data and the embedding
+  model ship in the image, so a cold start neither calls the LLM nor re-embeds anything, and the
+  container runs offline from the model hub.
 - **Abuse limits:** `DEMO_MODE=true` returns a read-only 403 for every write except evidence
-  queries and recommendation review. Live queries are rate-limited per client and per day
-  (`DEMO_QUERY_PER_IP_PER_MINUTE`, `DEMO_QUERY_DAILY_CAP`); LLM calls share a concurrency cap
-  and back off after a provider 429, degrading to deterministic retrieval instead of failing.
-- **Model baked in:** BGE-M3 is downloaded at build time and the container runs with
-  `HF_HUB_OFFLINE=1`.
+  queries and recommendation review (reviews reset when the instance restarts). Live queries are
+  rate-limited per client and per day (`DEMO_QUERY_PER_IP_PER_MINUTE`, `DEMO_QUERY_DAILY_CAP`);
+  LLM calls share a concurrency cap and back off after a provider 429, degrading to deterministic
+  retrieval instead of failing.
 
 Steps:
 
-1. Create a free Hugging Face Space (SDK: **Docker**) and a free Groq (or other
-   OpenAI-compatible) API key.
-2. In the Space settings add the secret `OPENAI_API_KEY` and the variables
-   `OPENAI_BASE_URL` (e.g. `https://api.groq.com/openai/v1`) and `DEFAULT_LLM_MODEL`.
-3. Build the Space bundle and push it to the Space repository:
+1. Push the `demo` branch to GitHub and get a free Groq (or other OpenAI-compatible) API key.
+2. In the Render Dashboard choose **New > Blueprint** and select this repository. Render reads
+   `render.yaml`, creates the free web service from the `demo` branch, and asks for
+   `OPENAI_API_KEY` (the only secret).
+3. After the first deploy, check the client IP the rate limiter sees: Render does not document
+   how many proxies append to `X-Forwarded-For`, and `DEMO_TRUSTED_PROXY_HOPS=1` assumes one.
 
-   ```bash
-   python scripts/build_space_bundle.py          # writes dist/space/
-   cd dist/space && git init && git add . && git commit -m "Deploy demo"
-   git push --force https://huggingface.co/spaces/<user>/<space> HEAD:main
-   ```
+To re-record the LLM fixtures (needed after changing prompts, the corpus, the pipeline order or
+the embedder), record inside the image's `base` stage so retrieval runs on the same Linux build:
 
-Limits to expect: free Spaces sleep after about 48 hours idle and take a few minutes to
-wake; the disk resets on restart (the demo re-seeds itself); the free LLM quota is small,
-but the seeded pages never need it.
+```bash
+docker build -f Dockerfile.demo --target base -t ci-demo-base .
+docker run --rm --env-file groq.env -v "$PWD/src/competitive_intelligence/demo/fixtures:/fx"   ci-demo-base python scripts/seed_demo.py --record --fixtures /fx/llm_replay.json   --database-url sqlite+aiosqlite:////tmp/rec.db --qdrant-path /tmp/rec-qdrant
+```
+
+`groq.env` holds `LLM_PROVIDER=openai`, `OPENAI_API_KEY`, `OPENAI_BASE_URL` and the model names;
+keep it out of git.
+
+Limits to expect: free instances spin down after 15 minutes without traffic, and a cold start
+takes 2 to 3 minutes (about 2 minutes 15 seconds of it is the app booting on 0.1 CPU); the filesystem is ephemeral (reviews reset); the free LLM quota is small, but
+the seeded pages never need it.
 
 ---
 

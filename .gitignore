@@ -92,3 +92,5 @@ scratch/
 .claude/settings.local.json
 # one-off override for the demo-fixture protection hook
 .claude/allow-fixture-edit
+# LLM credentials used only to re-record the demo fixtures
+groq.env
